@@ -1,22 +1,19 @@
 import test from 'ava';
 
 import {
-  graph,
   identifier,
   manyToOne,
   model,
-  oneToOne,
   view,
   reference,
   target,
   source,
   InferView,
-  poolSchema,
-  entityPool,
   graphSchema,
-  relationship,
-  one,
-  many,
+  single,
+  CollectionRefKeys,
+  ref,
+  oneWayGraph,
 } from '../src';
 import z from 'zod';
 
@@ -49,24 +46,14 @@ const messageModel = model({
   },
 });
 
-const gotcha = one(source(userModel, 'roomId').auto());
-console.log({ gotcha });
-
-const please = many(source(userModel, 'roomId').auto());
-
-const wat = one(target(chatRoomModel).as('users'));
-
-const hmm = relationship(
-  many(source(userModel, 'roomId').auto()),
-  one(target(chatRoomModel).as('users')),
-);
+//const okay = ref('collection', userModel, '');
 
 const userRoomRel = manyToOne(
   source(userModel, 'roomId').auto(),
   target(chatRoomModel).as('users'),
 );
 
-const chatRoomOwnerRel = oneToOne(
+const chatRoomOwnerRel = manyToOne(
   source(chatRoomModel, 'ownerId').auto(),
   target(userModel),
 );
@@ -147,7 +134,7 @@ const messageEntity = {
 // });
 
 test('graph', (t) => {
-  const chatRoomGraph = graph(
+  const chatRoomGraph = oneWayGraph(
     graphSchema(chatRoomView, [userView, messageView]),
   ).create(roomEntity, [
     { name: 'User', entity: edUserEntity },
@@ -155,5 +142,17 @@ test('graph', (t) => {
     { name: 'Message', entity: messageEntity },
   ]);
 
-  console.log(chatRoomGraph.pool);
+  chatRoomGraph.pool.apply([
+    {
+      operation: 'Update',
+      name: 'User',
+      entity: {
+        id: '2',
+        name: 'alice is awesome',
+      },
+    },
+    { operation: 'Delete', name: 'User', entity: { id: '1' } },
+  ]);
+  console.log(chatRoomGraph.root);
+  //console.log(chatRoomGraph.pool.state.snapshot());
 });
