@@ -5,9 +5,15 @@ import {
   resolve,
   TypedArray,
   PoolFactory,
-  entityPool, PoolSchema, InferDiscriminatedEntity, InferDiscriminatedEntityWithId, poolSchema, InferPoolEntity, Pool,
+  entityPool,
+  PoolSchema,
+  InferDiscriminatedEntity,
+  InferDiscriminatedEntityWithId,
+  poolSchema,
+  InferPoolEntity,
+  Pool,
 } from './model';
-import z from 'zod'
+import z from 'zod';
 
 type QueryArrayToModelArray<T extends TypedArray<QueryAny>> = {
   [Index in keyof T]: T[Index]['model'];
@@ -15,27 +21,27 @@ type QueryArrayToModelArray<T extends TypedArray<QueryAny>> = {
 
 export type InferDiscriminatedView<RM extends QueryAny> = RM extends any
   ? {
-    name: RM['model']['name'];
-    resolvedEntity: InferView<RM>;
-  }
+      name: RM['model']['name'];
+      resolvedEntity: InferView<RM>;
+    }
   : never;
-
 
 export type GraphSchema<RV extends QueryAny, V extends QueryAny> = {
   rootView: RV;
   views: V[];
-  poolSchema: PoolSchema<RV['model'],V['model']>
+  poolSchema: PoolSchema<RV['model'], V['model']>;
 
-  _view: V
+  _view: V;
   //todo: better name for this
   //view is the structure, but what should an instance be called?
-  _resolvedEntity: InferDiscriminatedView<RV | V>
+  _resolvedEntity: InferDiscriminatedView<RV | V>;
 };
 
-export type InferGraphResolvedEntity<S extends GraphSchemaAny> = S['_resolvedEntity']
-export type InferGraphView<S extends GraphSchemaAny> = S['_view']
+export type InferGraphResolvedEntity<S extends GraphSchemaAny> =
+  S['_resolvedEntity'];
+export type InferGraphView<S extends GraphSchemaAny> = S['_view'];
 
-export type GraphSchemaAny = GraphSchema<QueryAny, QueryAny>
+export type GraphSchemaAny = GraphSchema<QueryAny, QueryAny>;
 
 export function graphSchema<
   RV extends QueryAny,
@@ -44,9 +50,12 @@ export function graphSchema<
   return {
     rootView,
     views,
-    poolSchema: poolSchema(rootView.model, views.map(view => view.model)),
+    poolSchema: poolSchema(
+      rootView.model,
+      views.map((view) => view.model),
+    ),
     _view: null as any,
-    _resolvedEntity: null as any
+    _resolvedEntity: null as any,
   };
 }
 
@@ -54,51 +63,66 @@ export function graph<S extends GraphSchemaAny>(
   schema: S,
   poolFactory?: PoolFactory<S['poolSchema']>,
 ) {
-  const viewMap: Map<InferGraphView<S>['model']['name'], InferGraphView<S>>
+  const viewMap: Map<
+    InferGraphView<S>['model']['name'],
+    InferGraphView<S>
+  > = new Map(
+    [schema.rootView, ...schema.views].map((view) => [view.model.name, view]),
+  );
   //idk why the typing here is fucked
-  const poolFactoryOrDefault: PoolFactory<S['poolSchema']> = poolFactory ?? entityPool(
-    schema.poolSchema,
-    {
+  const poolFactoryOrDefault: PoolFactory<S['poolSchema']> =
+    poolFactory ??
+    entityPool(schema.poolSchema, {
       onMutation(state, mutation, entity) {
-        const view = viewMap.get(mutation.name)
-        if(!view) return
+        const view = viewMap.get(mutation.name);
+        if (!view) return;
 
-        switch(mutation.operation) {
+        switch (mutation.operation) {
           case 'Create': {
-            if(view.outgoingRelations) {
+            console.log(view.model);
+            if (view.outgoingRelations) {
               for (const outgoingRelation of view.outgoingRelations) {
+                console.log(outgoingRelation);
+                if (!outgoingRelation.source.materializedAs) break;
+
                 //todo
+              }
+            }
+            if (view.incomingRelations) {
+              for (const incomingRelation of view.incomingRelations) {
+                console.log(incomingRelation);
               }
             }
           }
         }
-
-      }
-    },
-  )
+      },
+    });
 
   return {
     create: (
       root: InferEntity<S['rootView']['model']>,
-      entities: InferPoolEntity<S['poolSchema']>[]
+      entities: InferPoolEntity<S['poolSchema']>[],
     ): {
       root: InferView<S['rootView']>;
-      pool: Pool<S['poolSchema'], InferEntity<S['rootView']['model']>>
+      pool: Pool<S['poolSchema'], InferEntity<S['rootView']['model']>>;
     } => {
       const pool = poolFactoryOrDefault.create(root, entities);
       return {
         root: resolve(schema.rootView, pool.root),
-        pool
+        pool,
       };
     },
     empty: (): {
       root: InferView<S['rootView']> | undefined;
-      pool: Pool<S['poolSchema'], InferEntity<S['rootView']['model']> | undefined>
+      pool: Pool<
+        S['poolSchema'],
+        InferEntity<S['rootView']['model']> | undefined
+      >;
     } => {
       const pool = poolFactoryOrDefault.empty();
       return {
         root: undefined,
-        pool
+        pool,
       };
     },
   };

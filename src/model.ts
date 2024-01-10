@@ -26,53 +26,155 @@ type RefBase<M extends ModelAny, F extends string | undefined> = {
 type Cardinality = 'one' | 'many';
 type WithCardinality<C extends Cardinality, E extends any> = { type: C } & E;
 
-//why is this typing so verbose
+//this typing is fucked
 export function one<
-  M extends ModelAny,
-  F extends string | undefined,
->(sourceOrTarget: { model: M; field: F }): { type: 'one'; model: M; field: F } {
+  Ref extends SourceRef<ModelAny, string, string | undefined>,
+>(
+  sourceOrTarget: Ref,
+): {
+  type: 'one';
+  model: Ref['model'];
+  field: Ref['field'];
+  materializedAs: Ref['materializedAs'];
+};
+export function one<Ref extends TargetRef<ModelAny, string | undefined>>(
+  sourceOrTarget: Ref,
+): { type: 'one'; model: Ref['model']; field: Ref['field'] };
+export function one<
+  Ref extends
+    | TargetRef<ModelAny, string | undefined>
+    | SourceRef<ModelAny, string, string | undefined>,
+>(
+  sourceOrTarget: Ref,
+): { type: 'one'; model: Ref['model']; field: Ref['field']; renamed?: string } {
   return {
     type: 'one',
-    model: sourceOrTarget.model,
-    field: sourceOrTarget.field,
+    ...sourceOrTarget,
   };
 }
 
+//should probably fix this with overloads
 //why is this typing so verbose
+// export function one<
+//   M extends ModelAny,
+//   F extends string | undefined,
+//   R extends string | undefined,
+// >(
+//   sourceOrTarget:
+//     | { model: M; field: F; renamed: R }
+//     | {
+//         model: M;
+//         field: F;
+//       },
+// ): { type: 'one'; model: M; field: F; renamed: R } {
+//   return {
+//     type: 'one',
+//     model: sourceOrTarget.model,
+//     field: sourceOrTarget.field,
+//     renamed: (sourceOrTarget as any)?.renamed ?? undefined, //gross
+//   };
+// }
+
+// export function many<
+//   Ref extends SourceRef<ModelAny, string>
+// >(sourceOrTarget: Ref): { type: 'many', model: Ref['model'], field: Ref['field']};
+// //why is this typing so verbose
+// export function many<
+//   Ref extends TargetRef<ModelAny, string>,
+// >(sourceOrTarget: Ref): { type: 'many',  model: Ref['model'], field: Ref['field'] }  {
+//   return {
+//     type: 'many',
+//     ...sourceOrTarget
+//   };
+// }
+
 export function many<
-  M extends ModelAny,
-  F extends string | undefined,
->(sourceOrTarget: {
-  model: M;
-  field: F;
-}): { type: 'many'; model: M; field: F } {
+  Ref extends SourceRef<ModelAny, string, string | undefined>,
+>(
+  sourceOrTarget: Ref,
+): {
+  type: 'many';
+  model: Ref['model'];
+  field: Ref['field'];
+  materializedAs: Ref['materializedAs'];
+};
+export function many<Ref extends TargetRef<ModelAny, string | undefined>>(
+  sourceOrTarget: Ref,
+): { type: 'many'; model: Ref['model']; field: Ref['field'] };
+export function many<
+  Ref extends
+    | TargetRef<ModelAny, string | undefined>
+    | SourceRef<ModelAny, string, string | undefined>,
+>(
+  sourceOrTarget: Ref,
+): {
+  type: 'many';
+  model: Ref['model'];
+  field: Ref['field'];
+  renamed?: string;
+} {
   return {
     type: 'many',
-    model: sourceOrTarget.model,
-    field: sourceOrTarget.field,
+    ...sourceOrTarget,
   };
 }
 
-type SourceRef<M extends ModelAny, F extends keyof ModelShape<M>> = {
+// type SourceRef<M extends ModelAny, F extends keyof ModelShape<M>> = {
+//   model: M;
+//   field: F;
+// };
+
+type SourceRef<
+  M extends ModelAny,
+  F extends string,
+  R extends string | undefined,
+> = {
   model: M;
   field: F;
+  materializedAs: R;
 };
 
-export function source<M extends ModelAny, F extends keyof ModelShape<M> & string>(
-  model: M,
-  field: F
-): SourceRef<M, F> {
+// export function source<
+//   M extends ModelAny,
+//   F extends keyof ModelShape<M> & string,
+// >(model: M, field: F): SourceRef<M, F> {
+//   return { model, field };
+// }
 
-  return { model, field };
-}
-
-export function sourceTest<M extends ModelAny, F extends keyof ModelShape<M> & string, R extends string | undefined>(
+export function source<
+  M extends ModelAny,
+  F extends keyof ModelShape<M> & string,
+>(
   model: M,
   field: F,
-  renamed: R
-) {
+): {
+  model: M;
+  field: F;
+  materializedAs: undefined;
+  as: <R extends string>(renamed: R) => SourceRef<M, F, R>;
+  auto: () => F extends `${infer R}Id`
+    ? SourceRef<M, F, R>
+    : F extends `${infer R}Ids`
+      ? SourceRef<M, F, `${R}s`>
+      : never;
+} {
+  return {
+    model,
+    field,
+    materializedAs: undefined,
+    as: (materializedAs) => ({
+      model,
+      field,
+      materializedAs,
+    }),
+    auto: () => {
+      const inferredMaterializedAs = field.endsWith('Id')
+        ? field.substring(0, field.length - 2)
+        : 'default';
 
-  return { model, field, renamed};
+      return { model, field, materializedAs: inferredMaterializedAs } as any; //yay type hacks
+    },
+  };
 }
 
 // export function autoSource<M extends ModelAny, F extends keyof ModelShape<M> & string>(
@@ -84,60 +186,103 @@ export function sourceTest<M extends ModelAny, F extends keyof ModelShape<M> & s
 //   return { model, field, renamed: inferredRenamed} as any; //yay more type hacks
 // }
 
-type TargetRef<M extends ModelAny, F extends string> = {
+type TargetRef<M extends ModelAny, F extends string | undefined> = {
   model: M;
-  field: F | undefined;
+  field: F;
 };
 
-export function target<M extends ModelAny, F extends string>(
+export function target<M extends ModelAny>(
   model: M,
-  field?: F,
-): TargetRef<M, F> {
-  return { model, field };
+): {
+  model: M;
+  field: undefined;
+  as: <F extends string>(field: F) => TargetRef<M, F>;
+} {
+  return {
+    model,
+    field: undefined,
+    as: <F extends string>(field: F) => ({
+      model,
+      field,
+    }),
+  };
 }
 
+//the source entity must hold the identifier
 type Relationship<
   SC extends Cardinality,
   SM extends ModelAny,
   SF extends keyof ModelShape<SM> & string,
+  SR extends string | undefined,
   TC extends Cardinality,
   TM extends ModelAny,
-  TF extends string,
+  TF extends string | undefined,
 > = {
-  source: WithCardinality<SC, SourceRef<SM, SF>>;
+  source: WithCardinality<SC, SourceRef<SM, SF, SR>>;
   target: WithCardinality<TC, TargetRef<TM, TF>>;
 };
+
+// type Relationship<
+//   SC extends Cardinality,
+//   SM extends ModelAny,
+//   SF extends keyof ModelShape<SM> & string,
+//   TC extends Cardinality,
+//   TM extends ModelAny,
+//   TF extends string | undefined,
+// > = {
+//   source: WithCardinality<SC, SourceRef<SM, SF>>;
+//   target: WithCardinality<TC, TargetRef<TM, TF>>;
+// };
 
 type OutgoingRelationship<SM extends ModelAny> = Relationship<
   Cardinality,
   SM,
   string,
+  string | undefined,
   Cardinality,
   ModelAny,
-  string
+  string | undefined
 >;
 type IncomingRelationship<TM extends ModelAny> = Relationship<
   Cardinality,
   ModelAny,
   string,
+  string | undefined,
   Cardinality,
   TM,
-  string
+  string | undefined
 >;
 
-//the source entity must hold the identifier
 //a field for the target can be specified to create a bidirectional relationship
+// export function relationship<
+//   SC extends Cardinality,
+//   SM extends ModelAny,
+//   SF extends keyof ModelShape<SM> & string,
+//   TC extends Cardinality,
+//   TM extends ModelAny,
+//   TF extends string | undefined,
+// >(
+//   source: WithCardinality<SC, SourceRef<SM, SF>>,
+//   target: WithCardinality<TC, TargetRef<TM, TF>>,
+// ): Relationship<SC, SM, SF, TC, TM, TF> {
+//   return {
+//     source,
+//     target,
+//   };
+// }
+
 export function relationship<
   SC extends Cardinality,
   SM extends ModelAny,
-  SF extends keyof ModelShape<SM> & string,
+  SF extends string,
+  SR extends string | undefined,
   TC extends Cardinality,
   TM extends ModelAny,
-  TF extends string,
+  TF extends string | undefined,
 >(
-  source: WithCardinality<SC, SourceRef<SM, SF>>,
+  source: WithCardinality<SC, SourceRef<SM, SF, SR>>,
   target: WithCardinality<TC, TargetRef<TM, TF>>,
-): Relationship<SC, SM, SF, TC, TM, TF> {
+): Relationship<SC, SM, SF, SR, TC, TM, TF> {
   return {
     source,
     target,
@@ -147,48 +292,52 @@ export function relationship<
 export function oneToOne<
   SM extends ModelAny,
   SF extends keyof ModelShape<SM> & string,
+  SR extends string | undefined,
   TM extends ModelAny,
-  TF extends string,
+  TF extends string | undefined,
 >(
-  source: SourceRef<SM, SF>,
+  source: SourceRef<SM, SF, SR>,
   target: TargetRef<TM, TF>,
-): Relationship<'one', SM, SF, 'one', TM, TF> {
+): Relationship<'one', SM, SF, SR, 'one', TM, TF> {
   return relationship(one(source), one(target));
 }
 
 export function oneToMany<
   SM extends ModelAny,
   SF extends keyof ModelShape<SM> & string,
+  SR extends string | undefined,
   TM extends ModelAny,
-  TF extends string,
+  TF extends string | undefined,
 >(
-  source: SourceRef<SM, SF>,
+  source: SourceRef<SM, SF, SR>,
   target: TargetRef<TM, TF>,
-): Relationship<'one', SM, SF, 'many', TM, TF> {
+): Relationship<'one', SM, SF, SR, 'many', TM, TF> {
   return relationship(one(source), many(target));
 }
 
 export function manyToOne<
   SM extends ModelAny,
   SF extends keyof ModelShape<SM> & string,
+  SR extends string | undefined,
   TM extends ModelAny,
-  TF extends string,
+  TF extends string | undefined,
 >(
-  source: SourceRef<SM, SF>,
+  source: SourceRef<SM, SF, SR>,
   target: TargetRef<TM, TF>,
-): Relationship<'many', SM, SF, 'one', TM, TF> {
+): Relationship<'many', SM, SF, SR, 'one', TM, TF> {
   return relationship(many(source), one(target));
 }
 
 export function manyToMany<
   SM extends ModelAny,
   SF extends keyof ModelShape<SM> & string,
+  SR extends string | undefined,
   TM extends ModelAny,
-  TF extends string,
+  TF extends string | undefined,
 >(
-  source: SourceRef<SM, SF>,
+  source: SourceRef<SM, SF, SR>,
   target: TargetRef<TM, TF>,
-): Relationship<'many', SM, SF, 'many', TM, TF> {
+): Relationship<'many', SM, SF, SR, 'many', TM, TF> {
   return relationship(many(source), many(target));
 }
 
@@ -347,7 +496,9 @@ type ResolvedOutgoing<
   SM extends any,
   R extends OutgoingRelationship<ModelAny>,
 > = Omit<SM, R['source']['field']> & {
-  [P in R as P['source']['field']]: InferReferenceOutput<P['target']>;
+  [P in R as ExcludeUndefined<
+    P['source']['materializedAs']
+  >]: InferReferenceOutput<P['target']>;
 } extends infer O
   ? { [K in keyof O]: O[K] }
   : never;
@@ -371,9 +522,8 @@ export function resolve<Q extends QueryAny>(
   view: Q,
   entity: z.infer<Q['model']['schema']>,
 ): ResolvedQuery<Q> {
-  return undefined
+  return undefined;
 }
-
 
 //this conditional is needed to distribute over the members of the union
 //so that we can discriminate over it as expected later
@@ -450,10 +600,7 @@ export type Pool<
   apply: (transaction: InferPoolMutation<S>[]) => void;
   //probably should be an array
   //probably wouldn't expose this at all
-  entities: Map<
-    InferPoolEntityName<S>,
-  InferPoolEntityWithId<S>
-  >
+  entities: Map<InferPoolEntityName<S>, InferPoolEntityWithId<S>>;
 };
 
 type DiscriminatedEntityParser<M extends any> = (
@@ -568,10 +715,7 @@ export function entityPool<S extends PoolSchemaAny>(
     parse?: DiscriminatedEntityParser<InferPoolEntity<S>>;
     onMutation?: (
       state: {
-        entities: Map<
-          InferPoolEntityName<S>,
-          InferPoolEntityWithId<S>
-        >
+        entities: Map<InferPoolEntityName<S>, InferPoolEntityWithId<S>>;
       },
       mutation: InferPoolMutation<S>,
       //this will be an entity matching the mutation or undefined if none could be found
@@ -595,11 +739,8 @@ export function entityPool<S extends PoolSchemaAny>(
   //(or get fancier and keep track of holes to skip over and fill in)
   //AKA classic entity pool data structure in game engines
   const state = {
-    entities: new Map<
-      InferPoolEntityName<S>,
-      InferPoolEntityWithId<S>
-    >()
-  }
+    entities: new Map<InferPoolEntityName<S>, InferPoolEntityWithId<S>>(),
+  };
 
   function getEntity(
     name: InferPoolEntityName<S>,
@@ -664,11 +805,12 @@ export function entityPool<S extends PoolSchemaAny>(
     }
     return undefined;
   }
+
   function apply(transaction: InferPoolMutation<S>[]) {
     const applyMutations: (() => void)[] = [];
-    console.log(transaction)
+    console.log(transaction);
     for (const mutation of transaction) {
-      console.log(mutation)
+      console.log(mutation);
       const entity = hasId(mutation.entity)
         ? getEntity(mutation.name, mutation.entity.id)
         : undefined;
@@ -697,13 +839,15 @@ export function entityPool<S extends PoolSchemaAny>(
 
   return {
     create: (root, entities) => {
-      console.log(entities)
+      console.log(entities);
       emptyPool.apply(
-        [{name: schema.rootModel.name, entity: root}, ...entities].map((entity) => ({
-          operation: 'Create',
-          name: entity.name,
-          entity: entity.entity,
-        })),
+        [{ name: schema.rootModel.name, entity: root }, ...entities].map(
+          (entity) => ({
+            operation: 'Create',
+            name: entity.name,
+            entity: entity.entity,
+          }),
+        ),
       );
 
       return {

@@ -1,4 +1,4 @@
-import test from 'ava'
+import test from 'ava';
 
 import {
   graph,
@@ -11,7 +11,12 @@ import {
   target,
   source,
   InferView,
-  poolSchema, entityPool, graphSchema,
+  poolSchema,
+  entityPool,
+  graphSchema,
+  relationship,
+  one,
+  many,
 } from '../src';
 import z from 'zod';
 
@@ -38,34 +43,45 @@ const messageModel = model({
     id: identifier(),
     text: z.string(),
     authorId: reference(),
-    recipient: reference(),
+    recipientId: reference(),
     order: z.number(),
     roomId: reference(),
   },
 });
 
+const gotcha = one(source(userModel, 'roomId').auto());
+console.log({ gotcha });
+
+const please = many(source(userModel, 'roomId').auto());
+
+const wat = one(target(chatRoomModel).as('users'));
+
+const hmm = relationship(
+  many(source(userModel, 'roomId').auto()),
+  one(target(chatRoomModel).as('users')),
+);
 
 const userRoomRel = manyToOne(
-  source(userModel, 'roomId'),
-  target(chatRoomModel, 'users'),
+  source(userModel, 'roomId').auto(),
+  target(chatRoomModel).as('users'),
 );
 
 const chatRoomOwnerRel = oneToOne(
-  source(chatRoomModel, 'ownerId'),
+  source(chatRoomModel, 'ownerId').auto(),
   target(userModel),
 );
 
 const authorRel = manyToOne(
-  source(messageModel, 'authorId'),
-  target(userModel, 'inbox'),
+  source(messageModel, 'authorId').auto(),
+  target(userModel).as('inbox'),
 );
 const recipientRel = manyToOne(
-  source(messageModel, 'recipient'),
-  target(userModel, 'outbox'),
+  source(messageModel, 'recipientId').auto(),
+  target(userModel).as('outbox'),
 );
 const messageRoomRel = manyToOne(
-  source(messageModel, 'roomId'),
-  target(chatRoomModel, 'messages'),
+  source(messageModel, 'roomId').auto(),
+  target(chatRoomModel).as('messages'),
 );
 
 const messageView = view(messageModel).outgoing([
@@ -102,35 +118,42 @@ const messageEntity = {
   id: '3',
   text: 'hello',
   authorId: '1',
-  recipient: '2',
+  recipientId: '2',
   order: 0,
   roomId: 'TestRoom',
 };
 
+// test('pool', (t) => {
+//   const chatRoomPool = entityPool(
+//     poolSchema(chatRoomModel, [userModel, messageModel]),
+//   ).create(roomEntity, [
+//     { name: 'User', entity: edUserEntity },
+//     { name: 'User', entity: aliceUserEntity },
+//     { name: 'Message', entity: messageEntity },
+//   ]);
+//
+//   chatRoomPool.apply([
+//     {
+//       operation: 'Update',
+//       name: 'User',
+//       entity: {
+//         id: '2',
+//         name: 'alice is awesome',
+//       },
+//     },
+//     { operation: 'Delete', name: 'User', entity: { id: '1' } },
+//   ]);
+//   console.log(chatRoomPool.entities);
+// });
 
-
-test('pool', t => {
-  const chatRoomPool = entityPool(poolSchema(chatRoomModel, [userModel, messageModel])).create(roomEntity, [
+test('graph', (t) => {
+  const chatRoomGraph = graph(
+    graphSchema(chatRoomView, [userView, messageView]),
+  ).create(roomEntity, [
     { name: 'User', entity: edUserEntity },
     { name: 'User', entity: aliceUserEntity },
     { name: 'Message', entity: messageEntity },
   ]);
 
-  chatRoomPool.apply([{ operation: 'Update', name: 'User', entity: {
-      id: '2',
-      name: 'alice is awesome'
-    }},
-    { operation: 'Delete', name: 'User', entity: {id: '1'}}])
-  console.log(chatRoomPool.entities)
+  console.log(chatRoomGraph.pool);
 });
-
-// test('graph', t => {
-//   const chatRoomGraph = graph(graphSchema(chatRoomView, [userView, messageView])).create(
-//     roomEntity,
-//     [{ name: 'User', entity: edUserEntity },
-//       { name: 'User', entity: aliceUserEntity },
-//       { name: 'Message', entity: messageEntity }]
-//   );
-//
-//   console.log(chatRoomGraph.pool)
-// });
