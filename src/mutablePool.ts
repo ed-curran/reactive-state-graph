@@ -1,34 +1,35 @@
 import { mergePatch } from './mergePatch';
-import { InferDiscriminatedEntity, InferEntity } from './core/model';
+import { DiscriminatedEntityWithId } from './core/model';
 import {
-  CreateMutation,
-  DeleteMutation,
   discriminatedEntityId,
-  DiscriminatedEntityParser,
   discriminatedModelParser,
   hasId,
   InferPoolEntity,
-  InferPoolEntityName,
   InferPoolEntityWithId,
-  InferPoolModel,
   InferPoolMutation,
+  InferPoolRootEntity,
   Pool,
-  PoolFactory,
+  PoolBuilder,
+  PoolOptions,
   PoolSchemaAny,
-  PoolState,
-  UpdateMutation,
 } from './core/pool';
 
-class MutablePoolState<S extends PoolSchemaAny> implements PoolState<S> {
-  private entities: Map<InferPoolEntityName<S>, InferPoolEntityWithId<S>>;
+interface PoolState<S extends DiscriminatedEntityWithId> {
+  get(name: S['name'], id: string): S | undefined;
+  set(discriminatedEntity: S): void;
+  delete(name: S['name'], id: string): void;
+  snapshot(): S[];
+}
+
+class MutablePoolState<S extends DiscriminatedEntityWithId>
+  implements PoolState<S>
+{
+  private entities: Map<S['name'], S>;
   constructor() {
     this.entities = new Map();
   }
 
-  get(
-    name: InferPoolEntityName<S>,
-    id: string,
-  ): InferPoolEntityWithId<S> | undefined {
+  get(name: S['name'], id: string): S | undefined {
     const discriminatedEntity = this.entities.get(
       discriminatedEntityId(name, id),
     );
@@ -37,7 +38,7 @@ class MutablePoolState<S extends PoolSchemaAny> implements PoolState<S> {
       : undefined;
   }
 
-  set(discriminatedEntity: InferPoolEntityWithId<S>) {
+  set(discriminatedEntity: S) {
     this.entities.set(
       discriminatedEntityId(
         discriminatedEntity.name,
@@ -46,11 +47,11 @@ class MutablePoolState<S extends PoolSchemaAny> implements PoolState<S> {
       discriminatedEntity,
     );
   }
-  delete(name: InferPoolEntityName<S>, id: string) {
+  delete(name: S['name'], id: string) {
     this.entities.delete(discriminatedEntityId(name, id));
   }
-  snapshot(): InferPoolEntity<S>[] {
-    const snapshot = new Array<InferPoolEntity<S>>();
+  snapshot(): S[] {
+    const snapshot = new Array<S>();
     this.entities.forEach((entity) => {
       snapshot.push(entity);
     });
@@ -58,53 +59,29 @@ class MutablePoolState<S extends PoolSchemaAny> implements PoolState<S> {
   }
 }
 
-interface MutationHandler<S extends PoolSchemaAny> {
-  create?: (
-    state: PoolState<S>,
-    //this is the entity we're about to create
-    discriminatedEntity: InferPoolEntityWithId<S>,
-    mutation: CreateMutation<InferPoolModel<S>>,
-  ) => void;
-  update?: (
-    state: PoolState<S>,
-    //this is the entity we're about to update but
-    discriminatedEntity: InferPoolEntityWithId<S>,
-    mutation: UpdateMutation<InferPoolModel<S>>,
-  ) => void;
-  delete?: (
-    state: PoolState<S>,
-    //this is the entity we're about to delete
-    discriminatedEntity: InferPoolEntityWithId<S>,
-    mutation: DeleteMutation<InferPoolModel<S>>,
-  ) => void;
-}
+export class MutablePool<S extends PoolSchemaAny> implements Pool<S> {
+  private rootState: InferPoolRootEntity<S> | undefined;
+  private state: PoolState<InferPoolEntityWithId<S>>;
+  private schema: S;
+  private options: PoolOptions<S> &
+    Required<Pick<PoolOptions<S>, 'merge' | 'parse'>>;
 
-export function mutableEntityPool<S extends PoolSchemaAny>(
-  schema: S,
-  options?: {
-    parse?: DiscriminatedEntityParser<InferPoolEntity<S>>;
-    onMutation?: MutationHandler<S>;
-    onTransaction?: (applyMutations: (() => void)[]) => void;
-    merge?: (entity: InferPoolEntity<S>['entity'], patch: any) => void; //this expects a mutable merge...
-  },
-): PoolFactory<S> {
-  const optionsOrDefault = {
-    parse: discriminatedModelParser(schema),
-    merge: mergePatch,
-    ...options,
-  };
-  //the typing in here gets pretty rough
-  //maybe i should type things as unknown in here
+  constructor(
+    schema: S,
+    options?: PoolOptions<S>,
+    poolState?: MutablePoolState<InferPoolEntityWithId<S>>,
+  ) {
+    this.schema = schema;
+    this.rootState = undefined;
+    this.state = poolState ?? new MutablePoolState<InferPoolEntityWithId<S>>();
+    this.options = {
+      parse: discriminatedModelParser(schema),
+      merge: mergePatch,
+      ...options,
+    };
+  }
 
-  //probably most efficient would be an array indexed by a map
-  //and handle deletions by filling the gap with the tail
-  //because the order of elements in the pool shouldn't matter
-  //(or get fancier and keep track of holes to skip over and fill in)
-  //AKA classic entity pool data structure in game engines
-  let root: InferEntity<S['rootModel']> | undefined = undefined;
-  const state = new MutablePoolState<S>();
-
-  function getApplyMutation(
+  private getApplyMutation(
     mutation: InferPoolMutation<S>,
     entity: InferPoolEntityWithId<S> | undefined,
   ): (() => void) | undefined {
@@ -124,13 +101,13 @@ export function mutableEntityPool<S extends PoolSchemaAny>(
           };
 
           return () => {
-            if (mutation.name === schema.rootModel.name) {
-              root = discriminatedEntity;
+            if (mutation.name === this.schema.rootModel.name) {
+              this.rootState = discriminatedEntity.entity;
             }
             //at some po
-            state.set(discriminatedEntity);
-            optionsOrDefault?.onMutation?.create?.(
-              state,
+            this.state.set(discriminatedEntity);
+            this.options?.onMutation?.create?.(
+              this.state,
               discriminatedEntity,
               mutation,
             );
@@ -145,10 +122,10 @@ export function mutableEntityPool<S extends PoolSchemaAny>(
         }
         if (hasId(mutation.entity)) {
           return () => {
-            optionsOrDefault?.onMutation?.update?.(state, entity, mutation);
+            this.options?.onMutation?.update?.(this.state, entity, mutation);
             //pretty sure this doesn't mutate mutation.entity
             //but does mutate our original entity
-            optionsOrDefault.merge(entity, mutation.entity);
+            this.options.merge(entity, mutation.entity);
           };
         }
         break;
@@ -160,8 +137,8 @@ export function mutableEntityPool<S extends PoolSchemaAny>(
         }
         if (hasId(mutation.entity)) {
           return () => {
-            optionsOrDefault?.onMutation?.delete?.(state, entity, mutation);
-            state.delete(mutation.name, mutation.entity.id);
+            this.options?.onMutation?.delete?.(this.state, entity, mutation);
+            this.state.delete(mutation.name, mutation.entity.id);
           };
         }
         break;
@@ -170,18 +147,18 @@ export function mutableEntityPool<S extends PoolSchemaAny>(
     return undefined;
   }
 
-  function apply(transaction: InferPoolMutation<S>[]) {
+  apply(transaction: InferPoolMutation<S>[]): void {
     const applyMutations: (() => void)[] = [];
     for (const mutation of transaction) {
       const entity = hasId(mutation.entity)
-        ? state.get(mutation.name, mutation.entity.id)
+        ? this.state.get(mutation.name, mutation.entity.id)
         : undefined;
-      const applyMutation = getApplyMutation(mutation, entity);
+      const applyMutation = this.getApplyMutation(mutation, entity);
       if (applyMutation !== undefined) applyMutations.push(applyMutation);
     }
-    if (optionsOrDefault.onTransaction) {
+    if (this.options.onTransaction) {
       //caller can choose how to apply the mutations
-      optionsOrDefault.onTransaction(applyMutations);
+      this.options.onTransaction(applyMutations);
     } else {
       //we'll apply the mutations instead
       for (const applyMutation of applyMutations) {
@@ -190,36 +167,35 @@ export function mutableEntityPool<S extends PoolSchemaAny>(
     }
   }
 
-  //todo: create transaction queue thingy
-  //we assume transactions have already been parsed and deduped etc at this point
-  const emptyPool: Pool<S, undefined> = {
-    root: undefined,
-    parse: optionsOrDefault.parse,
-    state: state,
-    apply,
-  };
+  getState(): PoolState<InferPoolEntityWithId<S>> {
+    return this.state;
+  }
 
-  return {
-    create: (snapshotRoot, entities) => {
-      emptyPool.apply(
-        [
-          { name: schema.rootModel.name, entity: snapshotRoot },
-          ...entities,
-        ].map((entity) => ({
+  withRoot(
+    root: InferPoolRootEntity<S>,
+    entities: InferPoolEntity<S>[],
+  ): InferPoolRootEntity<S> {
+    this.apply(
+      [{ name: this.schema.rootModel.name, entity: root }, ...entities].map(
+        (entity) => ({
           operation: 'Create',
           name: entity.name,
           entity: entity.entity,
-        })),
-      );
+        }),
+      ),
+    );
 
-      return {
-        ...emptyPool,
-        root: (root as InferDiscriminatedEntity<S['rootModel']>).entity, //hmm we know this is undefined because we applied it to the pool, but this is pretty sketch
-      };
-    },
-    empty: () => ({
-      ...emptyPool,
-      root: undefined,
-    }),
-  };
+    return this.rootState as InferPoolRootEntity<S>;
+  }
+
+  getRoot(): InferPoolRootEntity<S> | undefined {
+    return this.rootState;
+  }
 }
+
+export const mutablePool: PoolBuilder = function <S extends PoolSchemaAny>(
+  schema: S,
+  options?: PoolOptions<S>,
+) {
+  return new MutablePool(schema, options);
+};

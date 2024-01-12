@@ -8,13 +8,11 @@ import {
 } from './model';
 import {
   InferPoolEntity,
-  InferPoolEntityWithId,
+  InferPoolRootEntity,
   Pool,
-  PoolFactory,
   PoolSchema,
   poolSchema,
 } from './pool';
-import { mutableEntityPool } from '../mutablePool';
 
 type QueryArrayToModelArray<T extends TypedArray<QueryAny>> = {
   [Index in keyof T]: T[Index]['model'];
@@ -62,6 +60,15 @@ export function graphSchema<
     _view: null as any,
     _resolvedEntity: null as any,
   };
+}
+
+export interface Graph<S extends GraphSchemaAny> {
+  withRoot(
+    root: InferPoolRootEntity<S['poolSchema']>,
+    entities?: InferPoolEntity<S['poolSchema']>[],
+  ): InferGraphRootResolvedEntity<S>;
+  getRoot(): InferGraphRootResolvedEntity<S> | undefined;
+  getPool(): Pool<S['poolSchema']>;
 }
 
 function targetIds<M extends ModelAny, S extends OutgoingRelationship<M>>(

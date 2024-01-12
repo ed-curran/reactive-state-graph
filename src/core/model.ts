@@ -1,5 +1,4 @@
-import z, { any } from 'zod';
-import { mergePatch } from '../mergePatch';
+import z from 'zod';
 
 export const identifier = z.string;
 export const reference = z.string;
@@ -662,3 +661,13 @@ export type InferDiscriminatedEntityWithId<RM extends ModelAny> = RM extends any
       entity: z.infer<RM['schema']> & { readonly id: string };
     }
   : never;
+
+export type DiscriminatedEntityWithId = {
+  readonly name: string;
+  entity: {
+    id: string;
+    [key: string]: any;
+  };
+};
+
+type Test = Record<string, string>;

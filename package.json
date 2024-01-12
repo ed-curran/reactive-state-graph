@@ -8,7 +8,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
-    "lint": "tsc --no-emit",
+    "lint": "tsc --noEmit",
     "test": "ava",
     "release": "pnpm run build && changeset publish"
   },
@@ -24,6 +24,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "@legendapp/state": "^2.1.4",
     "zod": "^3.22.4"
   },
   "ava": {

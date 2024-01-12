@@ -1,21 +1,20 @@
 import test from 'ava';
 
 import {
+  graphSchema,
   identifier,
+  InferView,
   manyToOne,
   model,
-  view,
-  reference,
-  target,
-  source,
-  InferView,
-  graphSchema,
-  single,
-  CollectionRefKeys,
-  ref,
+  mutablePool,
   oneWayGraph,
+  reference,
+  source,
+  target,
+  view,
 } from '../src';
 import z from 'zod';
+import { poolSchema } from '../src/core/pool';
 
 const chatRoomModel = model({
   name: 'ChatRoom',
@@ -110,39 +109,17 @@ const messageEntity = {
   roomId: 'TestRoom',
 };
 
-// test('pool', (t) => {
-//   const chatRoomPool = entityPool(
-//     poolSchema(chatRoomModel, [userModel, messageModel]),
-//   ).create(roomEntity, [
-//     { name: 'User', entity: edUserEntity },
-//     { name: 'User', entity: aliceUserEntity },
-//     { name: 'Message', entity: messageEntity },
-//   ]);
-//
-//   chatRoomPool.apply([
-//     {
-//       operation: 'Update',
-//       name: 'User',
-//       entity: {
-//         id: '2',
-//         name: 'alice is awesome',
-//       },
-//     },
-//     { operation: 'Delete', name: 'User', entity: { id: '1' } },
-//   ]);
-//   console.log(chatRoomPool.entities);
-// });
-
-test('graph', (t) => {
-  const chatRoomGraph = oneWayGraph(
-    graphSchema(chatRoomView, [userView, messageView]),
-  ).create(roomEntity, [
+test('pool', (t) => {
+  const chatRoomPool = mutablePool(
+    poolSchema(chatRoomModel, [userModel, messageModel]),
+  );
+  const root = chatRoomPool.withRoot(roomEntity, [
     { name: 'User', entity: edUserEntity },
     { name: 'User', entity: aliceUserEntity },
     { name: 'Message', entity: messageEntity },
   ]);
 
-  chatRoomGraph.pool.apply([
+  chatRoomPool.apply([
     {
       operation: 'Update',
       name: 'User',
@@ -153,6 +130,34 @@ test('graph', (t) => {
     },
     { operation: 'Delete', name: 'User', entity: { id: '1' } },
   ]);
-  console.log(chatRoomGraph.root);
+  console.log(root);
+});
+
+// test('graph', (t) => {
+//   console.log('wtf');
+// });
+
+test('graph', (t) => {
+  const chatRoomGraph = oneWayGraph(
+    graphSchema(chatRoomView, [userView, messageView]),
+  );
+  const root = chatRoomGraph.withRoot(roomEntity, [
+    { name: 'User', entity: edUserEntity },
+    { name: 'User', entity: aliceUserEntity },
+    { name: 'Message', entity: messageEntity },
+  ]);
+  //
+  chatRoomGraph.getPool().apply([
+    {
+      operation: 'Update',
+      name: 'User',
+      entity: {
+        id: '2',
+        name: 'alice is awesome',
+      },
+    },
+    { operation: 'Delete', name: 'User', entity: { id: '1' } },
+  ]);
+  console.log(root);
   //console.log(chatRoomGraph.pool.state.snapshot());
 });
