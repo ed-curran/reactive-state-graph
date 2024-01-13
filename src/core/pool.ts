@@ -2,23 +2,24 @@ import {
   InferDiscriminatedEntity,
   InferDiscriminatedEntityWithId,
   InferEntity,
-  TypedArray,
   ModelAny,
   DiscriminatedEntityWithId,
 } from './model';
 import z from 'zod';
+import { TypedArray } from './util';
 
 export type PoolSchema<RM extends ModelAny, MA extends ModelAny> = {
   rootModel: RM;
-  models: MA[];
+  models: (RM | MA)[];
 
   //virtual fields to store types so that we don't have to keep recaculating them
-  readonly _model: MA;
-  readonly _entity: InferDiscriminatedEntity<MA>;
-  readonly _mutation: InferMutation<MA>;
-  readonly _entityName: MA['name'];
+  readonly _model: RM | MA;
+  readonly _entity: InferDiscriminatedEntity<RM | MA>;
+  readonly _mutation: InferMutation<RM | MA>;
+  readonly _entityName: RM['name'] | MA['name']; //apparently we have to join them together like this for some reason
   readonly _entityWithId: InferDiscriminatedEntityWithId<MA>; //gross, shouldn't need this
 };
+
 export type PoolSchemaAny = PoolSchema<ModelAny, ModelAny>;
 export type InferPoolModel<S extends PoolSchemaAny> = S['_model'];
 export type InferPoolEntity<S extends PoolSchemaAny> = S['_entity'];
@@ -28,11 +29,13 @@ export type InferPoolEntityName<S extends PoolSchemaAny> = S['_entityName'];
 export type InferPoolRootEntity<S extends PoolSchemaAny> = InferEntity<
   S['rootModel']
 >;
+export type InferPoolRootEntityWithId<S extends PoolSchemaAny> =
+  InferDiscriminatedEntityWithId<S['rootModel']>;
 
 export function poolSchema<
   RM extends ModelAny,
   MA extends TypedArray<ModelAny>,
->(rootModel: RM, models: MA): PoolSchema<RM, RM | MA[number]> {
+>(rootModel: RM, models: MA): PoolSchema<RM, MA[number]> {
   return {
     rootModel,
     models,
@@ -104,56 +107,30 @@ type InferMutation<RM extends ModelAny> = RM extends any
   ? CreateMutation<RM> | UpdateMutation<RM> | DeleteMutation<RM>
   : never;
 
-export interface MutationHandler<S extends PoolSchemaAny> {
+type InferName<RM extends ModelAny> = RM extends any ? RM['name'] : never;
+
+export interface MutationHandler<
+  S extends PoolSchemaAny,
+  PS extends PoolState<InferPoolEntityWithId<S>>,
+> {
   create?: (
-    state: PoolState<InferPoolEntityWithId<S>>,
+    state: PS,
     //this is the entity we're about to create
     discriminatedEntity: InferPoolEntityWithId<S>,
     mutation: CreateMutation<InferPoolModel<S>>,
   ) => void;
   update?: (
-    state: PoolState<InferPoolEntityWithId<S>>,
+    state: PS,
     //this is the entity we're about to update but
     discriminatedEntity: InferPoolEntityWithId<S>,
     mutation: UpdateMutation<InferPoolModel<S>>,
   ) => void;
   delete?: (
-    state: PoolState<InferPoolEntityWithId<S>>,
+    state: PS,
     //this is the entity we're about to delete
     discriminatedEntity: InferPoolEntityWithId<S>,
     mutation: DeleteMutation<InferPoolModel<S>>,
   ) => void;
-}
-
-export interface PoolOptions<S extends PoolSchemaAny> {
-  parse?: DiscriminatedEntityParser<InferPoolEntity<S>>;
-  onMutation?: MutationHandler<S>;
-  onTransaction?: (applyMutations: (() => void)[]) => void;
-  merge?: (entity: InferPoolEntity<S>['entity'], patch: any) => void; //this expects a mutable merge...
-}
-export interface PoolBuilder {
-  <S extends PoolSchemaAny>(schema: S, options?: PoolOptions<S>): Pool<S>;
-}
-
-export interface Pool<S extends PoolSchemaAny> {
-  withRoot(
-    root: InferPoolRootEntity<S>,
-    entities?: InferPoolEntity<S>[],
-  ): InferPoolRootEntity<S>;
-  getRoot(): InferPoolRootEntity<S> | undefined;
-
-  //a transaction consists of a collection of mutations
-  //todo make this a pure function
-  apply: (transaction: InferPoolMutation<S>[]) => void;
-  //probably should be an array
-  //probably wouldn't expose this at all
-  getState(): PoolState<InferPoolEntityWithId<S>>;
-}
-
-export function hasId(
-  object: Record<string, any>,
-): object is { id: string; [p: string]: any } {
-  return 'id' in object;
 }
 
 //i would like to be more immutable / pure
@@ -161,11 +138,50 @@ export function hasId(
 //this function annoys me
 //i keep having to use lots of second order types in the body
 //should i make this a class
-export interface PoolState<S extends DiscriminatedEntityWithId> {
-  get(name: S['name'], id: string): S | undefined;
-  set(discriminatedEntity: S): void;
-  delete(name: S['name'], id: string): void;
-  snapshot(): S[];
+export interface PoolState<
+  I extends DiscriminatedEntityWithId,
+  O extends any = I,
+> {
+  get(name: I['name'], id: string): O | undefined;
+  set(discriminatedEntity: I): O;
+  delete(name: I['name'], id: string): void;
+  snapshot(): I[];
+}
+
+export interface PoolOptions<
+  S extends PoolSchemaAny,
+  PS extends PoolState<InferPoolEntityWithId<S>>,
+> {
+  parse?: DiscriminatedEntityParser<InferPoolEntity<S>>;
+  onMutation?: MutationHandler<S, PS>;
+  onTransaction?: (applyMutations: (() => void)[]) => void;
+  merge?: (entity: InferPoolEntity<S>['entity'], patch: any) => void; //this expects a mutable merge...
+}
+// export interface PoolBuilder {
+//   <S extends PoolSchemaAny>(schema: S, options?: PoolOptions<S>): Pool<S>;
+// }
+
+// export interface Pool<
+//   S extends PoolSchemaAny,
+//   RO extends InferPoolRootEntity<S> = InferPoolRootEntity<S>,
+//   EO extends any = InferPoolEntityWithId<S>['entity'],
+// > {
+//   createRoot(root: InferPoolRootEntity<S>, entities?: InferPoolEntity<S>[]): RO;
+//   createEntity(entity: InferPoolEntityWithId<S>): EO;
+//
+//   getRoot(): RO | undefined;
+//   //a transaction consists of a collection of mutations
+//   //todo make this a pure function
+//   // apply: (transaction: InferPoolMutation<S>[]) => void;
+//   //probably should be an array
+//   //probably wouldn't expose this at all
+//   getState(): PoolState<InferPoolEntityWithId<S>, EO>;
+// }
+
+export function hasId(
+  object: Record<string, any>,
+): object is { id: string; [p: string]: any } {
+  return 'id' in object;
 }
 
 export function discriminatedEntityId(name: string, id: string) {

@@ -3,24 +3,22 @@ import {
   InferPoolEntityWithId,
   InferPoolRootEntity,
   MutationHandler,
-  Pool,
-  PoolBuilder,
-} from './core/pool';
-import { mutablePool } from './mutablePool';
+} from '../core/pool';
+import { MutablePool, mutablePool, MutablePoolState } from './mutablePool';
 import {
   Graph,
   GraphSchemaAny,
   InferGraphRootResolvedEntity,
   InferGraphView,
-} from './core/graph';
+} from '../core/graph';
 
-class OneWayGraph<S extends GraphSchemaAny> implements Graph<S> {
+export class OneWayGraph<S extends GraphSchemaAny> implements Graph<S> {
   private readonly schema: S;
   private readonly viewMap: Map<
     InferGraphView<S>['model']['name'],
     InferGraphView<S>
   >;
-  private readonly pool: Pool<S['poolSchema']>;
+  private readonly pool: MutablePool<S['poolSchema']>;
 
   constructor(schema: S) {
     this.schema = schema;
@@ -32,7 +30,7 @@ class OneWayGraph<S extends GraphSchemaAny> implements Graph<S> {
     });
   }
 
-  getPool(): Pool<S['poolSchema']> {
+  getPool(): MutablePool<S['poolSchema']> {
     return this.pool;
   }
 
@@ -44,19 +42,19 @@ class OneWayGraph<S extends GraphSchemaAny> implements Graph<S> {
     rootSnapshot: InferPoolRootEntity<S['poolSchema']>,
     entities?: InferPoolEntity<S['poolSchema']>[],
   ): InferGraphRootResolvedEntity<S> {
-    const root = this.pool.withRoot(rootSnapshot, entities);
+    const root = this.pool.createRoot(rootSnapshot, entities ?? []);
     return root as InferGraphRootResolvedEntity<S>;
   }
 }
-export function oneWayGraph<S extends GraphSchemaAny>(
-  schema: S,
-  poolFactory?: PoolBuilder,
-) {
+export function oneWayGraph<S extends GraphSchemaAny>(schema: S) {
   return new OneWayGraph(schema);
 }
 function getOneWayMutationHandler<S extends GraphSchemaAny>(
   viewMap: Map<InferGraphView<S>['model']['name'], InferGraphView<S>>,
-): MutationHandler<S['poolSchema']> {
+): MutationHandler<
+  S['poolSchema'],
+  MutablePoolState<InferPoolEntityWithId<S['poolSchema']>>
+> {
   return {
     create(state, discriminatedEntity, mutation) {
       console.log(discriminatedEntity);

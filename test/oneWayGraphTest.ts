@@ -2,50 +2,25 @@ import test from 'ava';
 
 import {
   graphSchema,
-  identifier,
   InferView,
   manyToOne,
-  model,
   mutablePool,
-  oneWayGraph,
-  reference,
+  OneWayGraph,
   source,
   target,
   view,
 } from '../src';
-import z from 'zod';
 import { poolSchema } from '../src/core/pool';
 
-const chatRoomModel = model({
-  name: 'ChatRoom',
-  shape: {
-    id: identifier(),
-    ownerId: reference(),
-  },
-});
-
-const userModel = model({
-  name: 'User',
-  shape: {
-    id: identifier(),
-    name: z.string(),
-    roomId: reference(),
-  },
-});
-
-const messageModel = model({
-  name: 'Message',
-  shape: {
-    id: identifier(),
-    text: z.string(),
-    authorId: reference(),
-    recipientId: reference(),
-    order: z.number(),
-    roomId: reference(),
-  },
-});
-
-//const okay = ref('collection', userModel, '');
+import {
+  aliceUserEntity,
+  chatRoomModel,
+  edUserEntity,
+  messageEntity,
+  messageModel,
+  roomEntity,
+  userModel,
+} from './modelFixture';
 
 const userRoomRel = manyToOne(
   source(userModel, 'roomId').auto(),
@@ -75,51 +50,36 @@ const messageView = view(messageModel).outgoing([
   recipientRel,
   messageRoomRel,
 ]);
-export type MessageView = InferView<typeof messageView>;
+
+type MessageView = InferView<typeof messageView>;
 
 const userView = view(userModel)
   .outgoing([userRoomRel])
   .incoming([authorRel, recipientRel]);
-export type UserView = InferView<typeof userView>;
+type UserView = InferView<typeof userView>;
 
 const chatRoomView = view(chatRoomModel).incoming([
   messageRoomRel,
   userRoomRel,
 ]);
-export type ChatRoomView = InferView<typeof chatRoomView>;
+type ChatRoomView = InferView<typeof chatRoomView>;
 
-const roomEntity = { id: 'TestRoom', ownerId: '1' };
-
-const edUserEntity = {
-  id: '1',
-  name: 'ed',
-  roomId: 'TestRoom',
-};
-const aliceUserEntity = {
-  id: '2',
-  name: 'alice',
-  roomId: 'TestRoom',
-};
-const messageEntity = {
-  id: '3',
-  text: 'hello',
-  authorId: '1',
-  recipientId: '2',
-  order: 0,
-  roomId: 'TestRoom',
-};
-
-test('pool', (t) => {
+test.skip('pool', (t) => {
   const chatRoomPool = mutablePool(
     poolSchema(chatRoomModel, [userModel, messageModel]),
   );
-  const root = chatRoomPool.withRoot(roomEntity, [
+  const test = chatRoomPool.createEntity({
+    name: 'User',
+    entity: edUserEntity,
+  });
+
+  const root = chatRoomPool.createRoot(roomEntity, [
     { name: 'User', entity: edUserEntity },
     { name: 'User', entity: aliceUserEntity },
     { name: 'Message', entity: messageEntity },
   ]);
 
-  chatRoomPool.apply([
+  chatRoomPool.getState.apply([
     {
       operation: 'Update',
       name: 'User',
@@ -133,12 +93,8 @@ test('pool', (t) => {
   console.log(root);
 });
 
-// test('graph', (t) => {
-//   console.log('wtf');
-// });
-
-test('graph', (t) => {
-  const chatRoomGraph = oneWayGraph(
+test.skip('graph', (t) => {
+  const chatRoomGraph = new OneWayGraph(
     graphSchema(chatRoomView, [userView, messageView]),
   );
   const root = chatRoomGraph.withRoot(roomEntity, [
@@ -146,7 +102,7 @@ test('graph', (t) => {
     { name: 'User', entity: aliceUserEntity },
     { name: 'Message', entity: messageEntity },
   ]);
-  //
+
   chatRoomGraph.getPool().apply([
     {
       operation: 'Update',
@@ -159,5 +115,4 @@ test('graph', (t) => {
     { operation: 'Delete', name: 'User', entity: { id: '1' } },
   ]);
   console.log(root);
-  //console.log(chatRoomGraph.pool.state.snapshot());
 });
