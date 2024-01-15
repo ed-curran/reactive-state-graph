@@ -1,18 +1,13 @@
-import {
-  InferEntity,
-  InferView,
-  ModelAny,
-  OutgoingRelationship,
-  QueryAny,
-  TypedArray,
-} from './model';
+import { InferEntity, ModelAny, OutgoingRelationship } from './model';
 import {
   InferPoolEntity,
   InferPoolRootEntity,
-  Pool,
   PoolSchema,
   poolSchema,
 } from './pool';
+import { MutablePool } from '../oneWayGraph/mutablePool';
+import { TypedArray } from './util';
+import { InferView, QueryAny } from './view';
 
 type QueryArrayToModelArray<T extends TypedArray<QueryAny>> = {
   [Index in keyof T]: T[Index]['model'];
@@ -27,10 +22,10 @@ export type InferDiscriminatedView<RM extends QueryAny> = RM extends any
 
 export type GraphSchema<RV extends QueryAny, V extends QueryAny> = {
   rootView: RV;
-  views: V[];
+  views: (RV | V)[];
   poolSchema: PoolSchema<RV['model'], V['model']>;
 
-  _view: V;
+  _view: RV | V;
   //todo: better name for this
   //view is the structure, but what should an instance be called?
   _resolvedEntity: InferDiscriminatedView<RV | V>;
@@ -49,7 +44,7 @@ export type GraphSchemaAny = GraphSchema<QueryAny, QueryAny>;
 export function graphSchema<
   RV extends QueryAny,
   MV extends TypedArray<QueryAny>,
->(rootView: RV, views: MV): GraphSchema<RV, RV | MV[number]> {
+>(rootView: RV, views: MV): GraphSchema<RV, MV[number]> {
   return {
     rootView,
     views,
@@ -68,7 +63,7 @@ export interface Graph<S extends GraphSchemaAny> {
     entities?: InferPoolEntity<S['poolSchema']>[],
   ): InferGraphRootResolvedEntity<S>;
   getRoot(): InferGraphRootResolvedEntity<S> | undefined;
-  getPool(): Pool<S['poolSchema']>;
+  getPool(): MutablePool<S['poolSchema']>;
 }
 
 function targetIds<M extends ModelAny, S extends OutgoingRelationship<M>>(
