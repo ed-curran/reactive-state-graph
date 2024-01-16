@@ -17,7 +17,7 @@ export type PoolSchema<RM extends ModelAny, MA extends ModelAny> = {
   readonly _entity: InferDiscriminatedEntity<RM | MA>;
   readonly _mutation: InferMutation<RM | MA>;
   readonly _entityName: RM['name'] | MA['name']; //apparently we have to join them together like this for some reason
-  readonly _entityWithId: InferDiscriminatedEntityWithId<MA>; //gross, shouldn't need this
+  readonly _entityWithId: InferDiscriminatedEntityWithId<RM | MA>; //gross, shouldn't need this
 };
 
 export type PoolSchemaAny = PoolSchema<ModelAny, ModelAny>;

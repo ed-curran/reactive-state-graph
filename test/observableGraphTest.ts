@@ -96,20 +96,10 @@ test.skip('observable graph', (t) => {
     graphSchema(chatRoomView, [userView, messageView]),
   );
   const root = chatRoomGraph.createRoot(roomEntity);
-  const edUserObservable = chatRoomGraph.createEntity({
-    name: 'User',
-    entity: edUserEntity,
-  });
-  const aliceUserObservable = chatRoomGraph.createEntity({
-    name: 'User',
-    entity: aliceUserEntity,
-  });
-  const messageObservable = chatRoomGraph.createEntity({
-    name: 'Message',
-    entity: messageEntity,
-  });
+  const edUserObservable = chatRoomGraph.create('User', edUserEntity);
+  const aliceUserObservable = chatRoomGraph.create('User', aliceUserEntity);
+  const messageObservable = chatRoomGraph.create('Message', messageEntity);
 
-  console.log('hmm');
   console.log(
     root.users[0]
       ?.portal(userView)
@@ -123,12 +113,14 @@ test.skip('observable graph', (t) => {
   root.users[0]?.portal(userView).onChange(() => {
     console.log('first user changed');
   });
+
   messageObservable.author.portal().onChange((change) => {
     console.log('parent changed');
     console.log(change);
   });
 
   messageObservable.author.replaceWith(aliceUserObservable);
+
   console.log(edUserObservable.get());
   console.log(aliceUserObservable.get());
   //root.users[0]?.portal(userView).outbox[0].portal(messageView).author.

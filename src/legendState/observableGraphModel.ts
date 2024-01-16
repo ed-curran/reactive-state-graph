@@ -13,7 +13,7 @@ import { InferView, Query } from '../core/view';
 import { TypedArray } from '../core/util';
 import { ObservableArray, ObservableObject } from '@legendapp/state';
 
-interface TargetRefWithView<M extends ModelAny> {
+export interface TargetRefWithView<M extends ModelAny> {
   id: string;
   //portals through to another entity in the graph, the returned observable:
   //1. does get notified when the entry entity is modified but only when listening to the observable returned, not on nested fields (no idea why)
@@ -44,7 +44,7 @@ interface TargetRefWithView<M extends ModelAny> {
   // replace(replacement?: T): void;
 }
 
-interface SourceRefWithView<M extends ModelAny> {
+export interface SourceRefWithView<M extends ModelAny> {
   id: string;
   //portals through to another entity in the graph, the returned observable:
   //1. does get notified when the entry entity is modified but only when listening to the observable returned, not on nested fields (no idea why)

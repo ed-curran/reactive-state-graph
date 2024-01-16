@@ -1,6 +1,6 @@
 {
   "name": "reactive-state-graph",
-  "version": "1.0.0",
+  "version": "0.1.7",
   "description": "",
   "type": "commonjs",
   "main": "dist/index.js",
@@ -24,8 +24,10 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@legendapp/state": "^2.1.4",
-    "zod": "^3.22.4"
+  },
+  "peerDependencies": {
+    "zod": "^3.22.4",
+    "@legendapp/state": "2.1.4"
   },
   "ava": {
     "files": [

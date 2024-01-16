@@ -1,4 +1,5 @@
 export * from './core/model';
+export * from './core/pool';
 export * from './core/graph';
 export * from './core/view';
 export * from './core/default';

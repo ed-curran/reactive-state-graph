@@ -24,13 +24,18 @@ import {
   PoolState,
 } from '../core/pool';
 import { ListenerParams } from '@legendapp/state/src/observableInterfaces';
-import z from 'zod';
+import z, { string } from 'zod';
 import {
   GraphSchemaAny,
   InferGraphRootResolvedEntity,
   InferGraphView,
 } from '../core/graph';
 import { InferView } from '../core/view';
+import {
+  configureObservablePersistence,
+  persistObservable,
+} from '@legendapp/state/persist';
+import { ObservablePersistIndexedDB } from '@legendapp/state/persist-plugins/indexeddb';
 
 class ObservablePoolState<S extends PoolSchemaAny> {
   //Observable type shits itself if i put the generic in there
@@ -38,6 +43,12 @@ class ObservablePoolState<S extends PoolSchemaAny> {
     InferPoolEntityName<S>,
     ObservableObject<{
       [key: string]: DiscriminatedEntityWithId['entity'];
+    }>
+  > = new Map();
+  private loadedMap: Map<
+    InferPoolEntityName<S>,
+    ObservableObject<{
+      //isLoadedLocal: boolean;
     }>
   > = new Map();
   private onSet:
@@ -54,8 +65,9 @@ class ObservablePoolState<S extends PoolSchemaAny> {
       entity: InferObservableDiscriminatedEntity<InferPoolModel<S>>,
     ) => void,
   ) {
+    const combined = [schema.rootModel, ...schema.models];
     this.entities = new Map(
-      [schema.rootModel, ...schema.models].map((model) => {
+      combined.map((model) => {
         const entityTable = observable(
           {} as {
             [key: string]: DiscriminatedEntityWithId['entity'];
@@ -107,15 +119,36 @@ class ObservablePoolState<S extends PoolSchemaAny> {
 
   snapshot(): InferPoolEntityWithId<S>[] {
     const snapshotEntity: InferPoolEntityWithId<S>[] = [];
-    this.entities.forEach((table, entityName) => {
-      Object.entries(table.peek()).forEach(([entityId, entity]) => {
+    for (const [entityName, table] of this.entities) {
+      const tableValue = table.peek();
+      for (const entityId in table.peek()) {
+        const entity = tableValue[entityId];
         snapshotEntity.push({
           name: entityName,
           entity: entity,
         } as InferPoolEntityWithId<S>);
-      });
-    });
+      }
+    }
+
     return snapshotEntity;
+  }
+
+  getEntityStatus(name: InferPoolEntityName<S>) {
+    return this.loadedMap.get(name)!;
+  }
+
+  getStatus() {
+    const all = new Array<{
+      name: InferPoolEntityName<S>;
+      status: ObservableObject<{}>;
+    }>();
+    for (const [name, status] of this.loadedMap) {
+      all.push({ name, status });
+    }
+    return all;
+  }
+  getEntities() {
+    return this.entities;
   }
 }
 
@@ -233,14 +266,12 @@ export class ObservablePool<S extends PoolSchemaAny> {
   getRoot(): ObservableObject<InferPoolRootEntity<S>> | undefined {
     return this.rootState;
   }
-  getState(): PoolState<
-    InferPoolEntityWithId<S>,
-    ObservableObject<InferPoolEntityWithId<S>['entity']>
-  > {
+  getState(): ObservablePoolState<S> {
     return this.state;
   }
 }
 
+export interface ObservableGraphOptions {}
 export class ObservableGraph<S extends GraphSchemaAny> {
   private readonly schema: S;
   private readonly viewMap: Map<
@@ -249,7 +280,7 @@ export class ObservableGraph<S extends GraphSchemaAny> {
   >;
   private readonly pool: ObservablePool<S['poolSchema']>;
 
-  constructor(schema: S) {
+  constructor(schema: S, options?: ObservableGraphOptions) {
     this.schema = schema;
     this.viewMap = new Map(
       [schema.rootView, ...schema.views].map((view) => [view.model.name, view]),
@@ -269,28 +300,62 @@ export class ObservableGraph<S extends GraphSchemaAny> {
 
   createRoot(
     rootSnapshot: InferPoolRootEntityWithId<S['poolSchema']>['entity'],
-    entities?: InferPoolEntity<S['poolSchema']>[],
+    entities?: InferPoolEntityWithId<S['poolSchema']>[],
   ): ObservableObject<InferGraphRootResolvedEntity<S>> {
+    //todo create these in the same batch?
     const root = this.pool.createRoot(rootSnapshot, entities ?? []);
+    for (const entity of entities ?? []) {
+      this.pool.createEntity(entity);
+    }
     return root as InferGraphRootResolvedEntity<S>;
   }
 
-  createEntity<T extends InferPoolEntityWithId<S['poolSchema']>>(
-    discriminatedEntity: T,
-  ): ObservableObject<
-    InferView<Extract<InferGraphView<S>, { model: { name: T['name'] } }>>
-  > {
-    const entity = this.pool.createEntity(discriminatedEntity);
-    return entity as any;
-  }
-  getEntity<T extends InferPoolEntityName<S['poolSchema']>>(
+  create<T extends InferPoolEntityName<S['poolSchema']>>(
     name: T,
-    id: string,
+    entity: Extract<
+      InferPoolEntityWithId<S['poolSchema']>,
+      { name: T }
+    >['entity'],
   ): ObservableObject<
     InferView<Extract<InferGraphView<S>, { model: { name: T } }>>
   > {
+    const foundEntity = this.pool.createEntity({ name, entity });
+    return foundEntity as any;
+  }
+
+  get<T extends InferPoolEntityName<S['poolSchema']>>(
+    name: T,
+    id: string,
+  ):
+    | ObservableObject<
+        InferView<Extract<InferGraphView<S>, { model: { name: T } }>>
+      >
+    | undefined {
     const entity = this.pool.getState().get(name, id);
     return entity as any;
+  }
+}
+
+export function persistGraph<T extends GraphSchemaAny>(
+  graph: ObservableGraph<T>,
+  options: { databaseName: string; version: number },
+) {
+  const entities = graph.getPool().getState().getEntities();
+  const tables = Array.from(entities.keys());
+  configureObservablePersistence({
+    pluginLocal: ObservablePersistIndexedDB,
+    localOptions: {
+      indexedDB: {
+        databaseName: options.databaseName,
+        version: options.version,
+        tableNames: tables,
+      },
+    },
+  });
+  for (const [name, entityTable] of entities) {
+    persistObservable(entityTable, {
+      local: name, // IndexedDB table name
+    });
   }
 }
 
@@ -342,13 +407,6 @@ function getObservableMutationHandler<S extends GraphSchemaAny>(
     postCreate(state, discriminatedEntity, mutation) {
       const view = viewMap.get(mutation.name);
       if (!view) return;
-
-      //this is so our circular typing thing works
-      discriminatedEntity.entity.assign({
-        as(view: any) {
-          return discriminatedEntity;
-        },
-      });
 
       const sourceEntity = discriminatedEntity.entity;
 
@@ -837,7 +895,6 @@ function materialiseCollectionToSingle<
                   source.id.peek(),
                 ) as any,
               );
-              console.log({ hereBottom: targetEntity });
             }
           }
         }
