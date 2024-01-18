@@ -1,6 +1,6 @@
 {
   "name": "reactive-state-graph",
-  "version": "0.1.7",
+  "version": "0.1.22",
   "description": "",
   "type": "commonjs",
   "main": "dist/index.js",

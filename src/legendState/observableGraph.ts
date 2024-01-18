@@ -1,16 +1,18 @@
 import {
   DiscriminatedEntityWithId,
-  InferEntity,
   ModelAny,
   OutgoingRelationship,
 } from '../core/model';
 import {
   batch,
+  beginBatch,
   computed,
+  endBatch,
   observable,
   ObservableArray,
   ObservableObject,
   ObservablePrimitive,
+  WithPersistState,
 } from '@legendapp/state';
 import {
   CreateMutation,
@@ -21,10 +23,9 @@ import {
   InferPoolRootEntity,
   InferPoolRootEntityWithId,
   PoolSchemaAny,
-  PoolState,
 } from '../core/pool';
 import { ListenerParams } from '@legendapp/state/src/observableInterfaces';
-import z, { string } from 'zod';
+import z from 'zod';
 import {
   GraphSchemaAny,
   InferGraphRootResolvedEntity,
@@ -186,8 +187,6 @@ export class ObservablePool<S extends PoolSchemaAny> {
   private rootState: ObservableObject<InferPoolRootEntity<S>> | undefined;
   private schema: S;
   private state: ObservablePoolState<S>;
-  // private options: PoolOptions<S> &
-  //   Required<Pick<PoolOptions<S>, 'merge' | 'parse'>>;
 
   constructor(
     schema: S,
@@ -200,62 +199,94 @@ export class ObservablePool<S extends PoolSchemaAny> {
       poolState ??
       new ObservablePoolState(
         this.schema,
-        undefined,
-        // (name, { value, changes }) => {
-        //   const entityChanges: Map<string, ObservableObject<any>> = new Map();
-        //   for (const change of changes) {
-        //     if (
-        //       name === this.schema.rootModel.name &&
-        //       change.path.length === 1
-        //     ) {
-        //       const entityId = change.path[0] as string;
-        //       const entity = this.state.get(name, entityId)!;
-        //       //forgive me for i have sinned
-        //       const discriminatedEntity = {
-        //         name,
-        //         entity: entity,
-        //       } as InferObservableDiscriminatedEntity<InferPoolModel<S>>;
-        //       this is a create
-        //       options?.onMutation?.postCreate?.(this.state, discriminatedEntity, {
-        //         name,
-        //         operation: 'Create',
-        //         entity: change.valueAtPath,
-        //       });
-        //       if (this.rootState === undefined)
-        //         this.rootState = value[change.path[0] as string];
-        //     }
-        //   }
-        // },
+        (name, { value, changes }) => {
+          const entityChanges: Map<string, ObservableObject<any>> = new Map();
+          for (const change of changes) {
+            if (change.path.length === 0) {
+              //got a change that sets the whole table (i.e. been loaded in from storage)
+              for (const entityId in value) {
+                const entity = this.state.get(name, entityId)!;
+                //forgive me for i have sinned
+                const discriminatedEntity = {
+                  name,
+                  entity: entity,
+                } as InferObservableDiscriminatedEntity<InferPoolModel<S>>;
+                //this is a create
+                options?.onMutation?.postCreate?.(
+                  this.state,
+                  discriminatedEntity,
+                  {
+                    name,
+                    operation: 'Create',
+                    entity: discriminatedEntity.entity,
+                  },
+                );
+                if (
+                  this.rootState === undefined &&
+                  name === this.schema.rootModel.name
+                )
+                  this.rootState = discriminatedEntity.entity as any;
+              }
+            } else if (change.path.length === 1) {
+              //got a change containing a single entity
+              const entityId = change.path[0] as string;
+              const entity = this.state.get(name, entityId)!;
+              //forgive me for i have sinned
+              const discriminatedEntity = {
+                name,
+                entity: entity,
+              } as InferObservableDiscriminatedEntity<InferPoolModel<S>>;
+              //this is a create
+              options?.onMutation?.postCreate?.(
+                this.state,
+                discriminatedEntity,
+                {
+                  name,
+                  operation: 'Create',
+                  entity: discriminatedEntity.entity,
+                },
+              );
+              if (
+                this.rootState === undefined &&
+                name === this.schema.rootModel.name
+              )
+                this.rootState = discriminatedEntity.entity as any;
+            }
+          }
+        },
         (discriminatedEntity) => {
           //oh gosh oh geez
-
-          options?.onMutation?.postCreate?.(this.state, discriminatedEntity, {
-            name: discriminatedEntity.name,
-            operation: 'Create',
-            entity: discriminatedEntity.entity,
-          });
-
-          if (
-            this.rootState === undefined &&
-            discriminatedEntity.name === this.schema.rootModel.name
-          )
-            this.rootState = discriminatedEntity.entity as any;
+          // options?.onMutation?.postCreate?.(this.state, discriminatedEntity, {
+          //   name: discriminatedEntity.name,
+          //   operation: 'Create',
+          //   entity: discriminatedEntity.entity,
+          // });
+          // if (
+          //   this.rootState === undefined &&
+          //   discriminatedEntity.name === this.schema.rootModel.name
+          // )
+          //   this.rootState = discriminatedEntity.entity as any;
         },
       );
   }
 
   createRoot(
     root: InferPoolRootEntityWithId<S>['entity'],
-    entities?: InferPoolEntity<S>[] | undefined,
-  ): ObservableObject<InferPoolRootEntityWithId<S>['entity']> {
+    entities?: InferPoolEntityWithId<S>[] | undefined,
+  ): ObservableObject<InferPoolRootEntity<S>> {
+    beginBatch();
     const createdRoot = this.state.set({
       name: this.schema.rootModel.name,
       entity: root,
     });
+    if (entities) {
+      for (const entity of entities) {
+        this.createEntity(entity);
+      }
+    }
+    endBatch();
 
-    return createdRoot as ObservableObject<
-      InferPoolRootEntityWithId<S>['entity']
-    >;
+    return createdRoot as ObservableObject<InferPoolRootEntity<S>>;
   }
   createEntity<T extends InferPoolEntityWithId<S>>(
     entity: T,
@@ -290,6 +321,9 @@ export class ObservableGraph<S extends GraphSchemaAny> {
     });
   }
 
+  getViews() {
+    return this.viewMap;
+  }
   getPool(): ObservablePool<S['poolSchema']> {
     return this.pool;
   }
@@ -338,7 +372,16 @@ export class ObservableGraph<S extends GraphSchemaAny> {
 
 export function persistGraph<T extends GraphSchemaAny>(
   graph: ObservableGraph<T>,
-  options: { databaseName: string; version: number },
+  {
+    databaseName,
+    version,
+    pluginRemote,
+    ...rest
+  }: {
+    databaseName: string;
+    version: number;
+    [key: string]: any;
+  },
 ) {
   const entities = graph.getPool().getState().getEntities();
   const tables = Array.from(entities.keys());
@@ -346,17 +389,71 @@ export function persistGraph<T extends GraphSchemaAny>(
     pluginLocal: ObservablePersistIndexedDB,
     localOptions: {
       indexedDB: {
-        databaseName: options.databaseName,
-        version: options.version,
+        databaseName: databaseName,
+        version: version,
         tableNames: tables,
       },
+      ...rest,
     },
   });
+
+  const entityStatus = new Map<
+    InferPoolEntityName<T['poolSchema']>,
+    ObservableObject<WithPersistState>
+  >();
   for (const [name, entityTable] of entities) {
-    persistObservable(entityTable, {
-      local: name, // IndexedDB table name
+    const entityView = graph.getViews().get(name);
+    //usually I would use maps and concat for this stuff for this but trying out the good ol' procedural thing for a change
+    const toIgnore = new Set<string>();
+    if (!entityView) break;
+
+    const fieldTransforms: Record<string, any> = {};
+
+    for (const field in entityView.model.schema.shape) {
+      fieldTransforms[field] = field;
+    }
+
+    if (entityView?.incomingRelations) {
+      for (const relation of entityView.incomingRelations) {
+        if (relation.target.field) {
+          toIgnore.add(relation.target.field);
+          fieldTransforms[relation.target.field] = null;
+        }
+      }
+    }
+    if (entityView?.outgoingRelations) {
+      for (const relation of entityView.outgoingRelations) {
+        if (relation.source.materializedAs) {
+          toIgnore.add(relation.source.materializedAs);
+          fieldTransforms[relation.source.materializedAs] = null;
+        }
+      }
+    }
+
+    let count = 0;
+    const status = persistObservable(entityTable, {
+      local: {
+        name,
+        transform: {},
+        //@ts-ignore
+        //its possible to use field transforms to filter out fields with a null
+        //but then you have to supply values for all the keys you want unchanged too which isn't very helpful
+        fieldTransforms: {
+          _dict: fieldTransforms,
+        },
+      }, // IndexedDB table name
+      remote: {
+        offlineBehavior: 'retry',
+        //@ts-ignore
+        fieldTransforms: {
+          _dict: fieldTransforms as any,
+        },
+      },
     });
+
+    entityStatus.set(name, status.state as any);
   }
+  return entityStatus;
 }
 
 function onRelation<
@@ -422,6 +519,13 @@ function getObservableMutationHandler<S extends GraphSchemaAny>(
               const materialisedAs = entity[incomingRelation.target.field];
               if (materialisedAs.peek() === undefined) {
                 materialisedAs.set([]);
+                Object.defineProperty(
+                  entity.peek(),
+                  incomingRelation.target.field,
+                  {
+                    enumerable: false,
+                  },
+                );
               }
             }
           },
@@ -579,51 +683,59 @@ interface TargetFields {
 }
 
 interface SourceSingleFields<T> {
+  entity: ObservableEntity;
   id: ObservablePrimitive<string>;
   field: ObservablePrimitive<string>;
   materialise:
-    | { toMaterialise: true; as: ObservableObject<SourceRef<T>> }
+    | {
+        toMaterialise: true;
+        asFieldName: string;
+        as: ObservableObject<SourceRef<T>>;
+      }
     | { toMaterialise: false };
 }
 interface SourceCollectionFields<T> {
+  entity: ObservableEntity;
   id: ObservablePrimitive<string>;
   field: ObservableArray<string[]>;
   materialise:
-    | { toMaterialise: true; as: ObservableArray<SourceRef<T>[]> }
+    | {
+        toMaterialise: true;
+        asFieldName: string;
+        as: ObservableArray<SourceRef<T>[]>;
+      }
     | { toMaterialise: false };
 }
 
 function extractSourceSingle<T>(
-  sourceEntity: ObservableObject<{
-    id: string;
-    [keys: string]: any;
-  }>,
+  sourceEntity: ObservableEntity,
   relationSource: OutgoingRelationship<ModelAny>['source'],
 ): SourceSingleFields<T> {
   return {
+    entity: sourceEntity,
     id: sourceEntity.id,
     field: sourceEntity[relationSource.field],
     materialise: relationSource.materializedAs
       ? {
           toMaterialise: true,
+          asFieldName: relationSource.materializedAs,
           as: sourceEntity[relationSource.materializedAs],
         }
       : { toMaterialise: false },
   };
 }
 function extractSourceCollection<T>(
-  sourceEntity: ObservableObject<{
-    id: string;
-    [keys: string]: any;
-  }>,
+  sourceEntity: ObservableEntity,
   relationSource: OutgoingRelationship<ModelAny>['source'],
 ): SourceCollectionFields<T> {
   return {
+    entity: sourceEntity,
     id: sourceEntity.id,
     field: sourceEntity[relationSource.field],
     materialise: relationSource.materializedAs
       ? {
           toMaterialise: true,
+          asFieldName: relationSource.materializedAs,
           as: sourceEntity[relationSource.materializedAs],
         }
       : { toMaterialise: false },
@@ -719,6 +831,13 @@ function materialiseSingleToSingle<
                 change.value,
               ),
             );
+            Object.defineProperty(
+              source.entity.peek(),
+              source.materialise.asFieldName,
+              {
+                enumerable: false,
+              },
+            );
           }
         }
 
@@ -755,6 +874,9 @@ function materialiseSingleToSingle<
                 sourceId,
               ),
             );
+            Object.defineProperty(targetEntity.peek(), target.materialisedAs, {
+              enumerable: false,
+            });
           }
         }
       });
@@ -789,6 +911,13 @@ function materialiseSingleToCollection<
                 change.value,
               ),
             );
+            Object.defineProperty(
+              source.entity.peek(),
+              source.materialise.asFieldName,
+              {
+                enumerable: false,
+              },
+            );
           }
         }
 
@@ -820,6 +949,9 @@ function materialiseSingleToCollection<
 
           if (targetCollection.peek() === undefined) {
             targetCollection.set([]);
+            Object.defineProperty(targetEntity.peek(), target.materialisedAs, {
+              enumerable: false,
+            });
           }
           const ref = initTargetRef(
             {
@@ -871,6 +1003,13 @@ function materialiseCollectionToSingle<
             );
             sourceMaterialisedAs.push(ref);
           }
+          Object.defineProperty(
+            source.entity.peek(),
+            source.materialise.asFieldName,
+            {
+              enumerable: false,
+            },
+          );
         }
         //materialise on target
         if (target.materialisedAs) {
@@ -894,6 +1033,13 @@ function materialiseCollectionToSingle<
                   },
                   source.id.peek(),
                 ) as any,
+              );
+              Object.defineProperty(
+                targetEntity.peek(),
+                target.materialisedAs,
+                {
+                  enumerable: false,
+                },
               );
             }
           }
