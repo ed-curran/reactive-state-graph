@@ -9,6 +9,9 @@
   "files": [
     "./*"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "pack": "pnpm run build && npm pack ./dist --pack-destination .",
     "build": "tsup && cp package.json dist && cp README.md dist",
