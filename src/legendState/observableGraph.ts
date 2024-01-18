@@ -375,7 +375,6 @@ export function persistGraph<T extends GraphSchemaAny>(
   {
     databaseName,
     version,
-    pluginRemote,
     ...rest
   }: {
     databaseName: string;

@@ -1,13 +1,17 @@
 {
-  "name": "reactive-state-graph",
-  "version": "0.1.22",
+  "name": "ts-graph",
+  "version": "0.0.26",
   "description": "",
   "type": "commonjs",
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
+  "main": "index.js",
+  "module": "index.mjs",
+  "types": "index.d.ts",
+  "files": [
+    "./*"
+  ],
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "pack": "pnpm run build && npm pack ./dist --pack-destination .",
+    "build": "tsup && cp package.json dist && cp README.md dist",
     "lint": "tsc --noEmit",
     "test": "ava",
     "release": "pnpm run build && changeset publish"
@@ -28,6 +32,14 @@
   "peerDependencies": {
     "zod": "^3.22.4",
     "@legendapp/state": "2.1.4"
+  },
+  "tsup": {
+    "dts": true,
+    "bundle": false,
+    "treeshake": true,
+    "target": "node18",
+    "format": ["esm", "cjs"],
+    "entry": ["src/**/*.ts"]
   },
   "ava": {
     "files": [

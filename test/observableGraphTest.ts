@@ -1,15 +1,11 @@
 import test from 'ava';
+import { graphSchema, InferView, manyToOne, view, poolSchema } from '../src';
 import {
-  graphSchema,
-  InferView,
-  manyToOne,
   ObservableGraph,
   ObservablePool,
-  observableSource,
-  observableTarget,
-  view,
-} from '../src';
-import { poolSchema } from '../src/core/pool';
+  source,
+  target,
+} from '../src/legendState';
 import { batch } from '@legendapp/state';
 import {
   aliceUserEntity,
@@ -22,26 +18,26 @@ import {
 } from './modelFixture';
 
 const userRoomRel = manyToOne(
-  observableSource(userModel, 'roomId').auto(),
-  observableTarget(chatRoomModel).as('users'),
+  source(userModel, 'roomId').auto(),
+  target(chatRoomModel).as('users'),
 );
 
 const chatRoomOwnerRel = manyToOne(
-  observableSource(chatRoomModel, 'ownerId').auto(),
-  observableTarget(userModel),
+  source(chatRoomModel, 'ownerId').auto(),
+  target(userModel),
 );
 
 const authorRel = manyToOne(
-  observableSource(messageModel, 'authorId').auto(),
-  observableTarget(userModel).as('inbox'),
+  source(messageModel, 'authorId').auto(),
+  target(userModel).as('inbox'),
 );
 const recipientRel = manyToOne(
-  observableSource(messageModel, 'recipientId').auto(),
-  observableTarget(userModel).as('outbox'),
+  source(messageModel, 'recipientId').auto(),
+  target(userModel).as('outbox'),
 );
 const messageRoomRel = manyToOne(
-  observableSource(messageModel, 'roomId').auto(),
-  observableTarget(chatRoomModel).as('messages'),
+  source(messageModel, 'roomId').auto(),
+  target(chatRoomModel).as('messages'),
 );
 
 const messageView = view(messageModel).outgoing([

@@ -77,7 +77,7 @@ export interface SourceRefWithView<M extends ModelAny> {
 
 //the source gets materialised onto the target, so this uses a targetRef
 //which is kind of confusing
-export function observableSource<
+export function source<
   M extends ModelAny,
   F extends keyof ModelShape<M> & string,
 >(
@@ -94,7 +94,7 @@ export function observableSource<
 
 //the target gets materialised onto the source, so this uses a sourceRef
 //which is kind of confusing
-export function observableTarget<M extends ModelAny>(
+export function target<M extends ModelAny>(
   model: M,
 ): TargetBuilder<
   M,

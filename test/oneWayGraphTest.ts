@@ -1,16 +1,8 @@
 import test from 'ava';
 
-import {
-  graphSchema,
-  InferView,
-  manyToOne,
-  mutablePool,
-  OneWayGraph,
-  source,
-  target,
-  view,
-} from '../src';
-import { poolSchema } from '../src/core/pool';
+import { graphSchema, InferView, manyToOne, view } from '../src';
+import { source, target, OneWayGraph } from '../src/oneWayGraph';
+import { poolSchema } from '../src';
 
 import {
   aliceUserEntity,
@@ -58,10 +50,9 @@ const userView = view(userModel)
   .incoming([authorRel, recipientRel]);
 type UserView = InferView<typeof userView>;
 
-const chatRoomView = view(chatRoomModel).incoming([
-  messageRoomRel,
-  userRoomRel,
-]);
+const chatRoomView = view(chatRoomModel)
+  .outgoing([chatRoomOwnerRel])
+  .incoming([messageRoomRel, userRoomRel]);
 type ChatRoomView = InferView<typeof chatRoomView>;
 
 test.skip('pool', (t) => {
@@ -114,5 +105,5 @@ test.skip('graph', (t) => {
     },
     { operation: 'Delete', name: 'User', entity: { id: '1' } },
   ]);
-  console.log(root);
+  console.log(root.owner.as(userView).inbox[0].as(messageView).author.name);
 });

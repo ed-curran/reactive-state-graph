@@ -8,9 +8,9 @@ import {
   OutgoingRelationship,
   SourceBuilder,
   TargetBuilder,
-} from './model';
-import { InferView, Query } from './view';
-import { TypedArray } from './util';
+} from '../core/model';
+import { InferView, Query } from '../core/view';
+import { TypedArray } from '../core/util';
 
 type ObjectWithAs<M extends ModelAny> = {
   as: <
