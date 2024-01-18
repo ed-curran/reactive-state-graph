@@ -1,6 +1,6 @@
-# TS Graph
+# TS State Graph
 
-ts-graph organises your application state as a graph, but stores it as a normalised pool of entities. 
+ts-state-graph organises your application state as a graph, but stores it as a normalised pool of entities. 
 This makes it is easier to automatically replicate state to your backend and between clients, 
 without needing to treat it like a single document. 
 
@@ -152,7 +152,7 @@ const chatRoomGraphSchema = graphSchema(chatRoomView, [userView, messageView])
 
 
 ```typescript
-import { OneWayGraph } from 'ts-graph/oneWayGraph';
+import { OneWayGraph } from 'ts-state-graph/oneWayGraph';
 
 const chatRoomGraph = new OneWayGraph(chatRoomGraphSchema);
 ```
@@ -191,7 +191,7 @@ root.owner.as(userView).inbox[0].as(messageView).author.name // -> type string
 
 ## Graph Implementations
 These inferred types are actually for a simplified graph implementation, called oneWayGraph, 
-which isn't suitable for real apps. ts-graph can support different graph implementations, where an implementation can control how the type of a view is inferred by exporting 
+which isn't suitable for real apps. ts-state-graph can support different graph implementations, where an implementation can control how the type of a view is inferred by exporting 
 their own `source` and `target` functions. 
 
 Different implementations will have a big impact on how your frontend is written, 
@@ -204,7 +204,7 @@ The natural fit is observables (or signals or whatever you want to call them). I
 
 ## Observable Graph
 
-ts-graph contains a proper graph implementation that uses legend-state,
+ts-state-graph contains a proper graph implementation that uses legend-state,
 because the built-in persistence functionality looked promising for multiplayer web apps.
 
 This is still in development, the client side graph part works although the api is a little clunky, local persistence works, 
@@ -212,7 +212,7 @@ I'm currently working on remote persistence.
 
 Import source and target from legendState in your graph schema file
 ```typescript
-import { source, target } from 'ts-graph/legendState';
+import { source, target } from 'ts-state-graph/legendState';
 
 ///rest of your schema
 ...
@@ -220,7 +220,7 @@ import { source, target } from 'ts-graph/legendState';
 
 Instantiate your graph
 ```typescript
-import { ObservableGraph, persistGraph } from 'ts-graph/legendState';
+import { ObservableGraph, persistGraph } from 'ts-state-graph/legendState';
 
 export const graph = new ObservableGraph(chatRoomGraphSchema);
 
