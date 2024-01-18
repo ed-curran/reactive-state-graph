@@ -52,7 +52,7 @@ export const messageModel = model({
 });
 
 //describe relationships between your entities
-const chatRoomOwnerRel = manyToOne(
+const chatRoomOwnerRel = oneToOne(
   source(chatRoomModel, 'ownerId').auto(),
   target(userModel),
 );
