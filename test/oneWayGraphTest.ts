@@ -1,7 +1,7 @@
 import test from 'ava';
 
 import { graphSchema, InferView, manyToOne, view } from '../src';
-import { source, target, OneWayGraph } from '../src/oneWayGraph';
+import { source, target, OneWayGraph, mutablePool } from '../src/oneWayGraph';
 import { poolSchema } from '../src';
 
 import {
@@ -105,5 +105,4 @@ test.skip('graph', (t) => {
     },
     { operation: 'Delete', name: 'User', entity: { id: '1' } },
   ]);
-  console.log(root.owner.as(userView).inbox[0].as(messageView).author.name);
 });
