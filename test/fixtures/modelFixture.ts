@@ -1,4 +1,4 @@
-import { identifier, model, reference } from '../src';
+import { identifier, model, reference } from '../../src';
 import z from 'zod';
 
 export const chatRoomModel = model({

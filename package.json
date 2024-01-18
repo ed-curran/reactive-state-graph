@@ -46,7 +46,8 @@
   },
   "ava": {
     "files": [
-      "test/**/*"
+      "test/**/*",
+      "!test/fixtures"
     ],
     "typescript": {
       "compile": "tsc",

@@ -15,7 +15,7 @@ import {
   messageModel,
   roomEntity,
   userModel,
-} from './modelFixture';
+} from './fixtures/modelFixture';
 
 const userRoomRel = manyToOne(
   source(userModel, 'roomId').auto(),
