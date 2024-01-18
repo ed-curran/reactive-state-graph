@@ -23,23 +23,26 @@
     "@ava/typescript": "^4.1.0",
     "@changesets/cli": "^2.27.1",
     "ava": "^6.0.1",
-    "prettier": "^3.1.1",
+    "prettier": "^3.2.4",
     "tsup": "^8.0.1",
     "typescript": "^5.3.3"
   },
-  "dependencies": {
-  },
   "peerDependencies": {
-    "zod": "^3.22.4",
-    "@legendapp/state": "2.1.4"
+    "@legendapp/state": "2.1.4",
+    "zod": "^3.22.4"
   },
   "tsup": {
     "dts": true,
     "bundle": false,
     "treeshake": true,
     "target": "node18",
-    "format": ["esm", "cjs"],
-    "entry": ["src/**/*.ts"]
+    "format": [
+      "esm",
+      "cjs"
+    ],
+    "entry": [
+      "src/**/*.ts"
+    ]
   },
   "ava": {
     "files": [
