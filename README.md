@@ -6,9 +6,9 @@ without needing to treat it like a single document.
 
 You'll get a two way data flow that looks like
 
-`frontend mutates graph -> mutates pool -> mutates server`
+client A: `frontend mutates graph -> mutates pool -> mutates server`
 
-`server applies mutation -> updates pool -> updates graph` 
+client B: `server applies mutation -> updates pool -> updates graph` 
 
 
 Now you can build multiplayer, client first, web apps while you enjoy a relatively familiar looking API on your server, and reactive state management on your client.  
@@ -17,7 +17,7 @@ This is the approach described by Linear for their client side state management 
 Except they use classes and decorators, and we use runtime types and type inference. 
 If you already use zod in your API (i.e. trpc or ts-rest) this may be a good fit for you ;)
 
-Let's have a look
+Let's have a look. Or alternatively checkout the [playground](https://codesandbox.io/p/sandbox/ts-state-graph-example-p7msm8).
 
 ```typescript
 //describe your entities
@@ -104,7 +104,7 @@ inferred as
         //this is how we get around type inference problems 
         //with circular types
         //so the signature here is simplified
-        as(view: UserView): InferView<UserView>
+        as(view: typeof userView): UserView
     };
     recipient: {...};
     room: {...};
@@ -124,10 +124,10 @@ type UserView = {
     room: {
         id: string;
         ownerId: string;
-        as(view: RoomView): InferView<RoomView>
+        as(view: typeof chatRoomView): ChatRoomView
     };
-    readonly inbox: {...}[] & { as(view: MessageView): InferView<MessageView>[] };
-    readonly outbox: {...}[] & { as(view: MessageView): InferView<MessageView>[] };
+    readonly inbox: {...}[] & { as(view: typeof messageView): MessageView[] };
+    readonly outbox: {...}[] & { as(view: typeof messageView): MessageView[] };
  */
 const chatRoomView = view(chatRoomModel)
   .outgoing([chatRoomOwnerRel])
@@ -139,8 +139,8 @@ type ChatRoomView = {
     id: string;
     ownerId: string;
     owner: {...};
-    readonly users: {...}[] & { as(view: UserView): InferView<UserView>[]};
-    readonly messages: {...}[] & { as(view: RoomView): InferView<MessageView>[] };
+    readonly users: {...}[] & { as(view: typeof userView): UserView[]};
+    readonly messages: {...}[] & { as(view: typeof roomView): MessageView[] };
 }
  */
 
