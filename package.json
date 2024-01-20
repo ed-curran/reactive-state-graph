@@ -10,7 +10,8 @@
     "./*"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "directory": "./dist"
   },
   "scripts": {
     "pack": "pnpm run build && npm pack ./dist --pack-destination .",

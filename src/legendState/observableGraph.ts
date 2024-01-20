@@ -12,6 +12,7 @@ import {
   ObservableArray,
   ObservableObject,
   ObservablePrimitive,
+  ObservableState,
   WithPersistState,
 } from '@legendapp/state';
 import {
@@ -398,7 +399,7 @@ export function persistGraph<T extends GraphSchemaAny>(
 
   const entityStatus = new Map<
     InferPoolEntityName<T['poolSchema']>,
-    ObservableObject<WithPersistState>
+    ObservableObject<ObservableState>
   >();
   for (const [name, entityTable] of entities) {
     const entityView = graph.getViews().get(name);
