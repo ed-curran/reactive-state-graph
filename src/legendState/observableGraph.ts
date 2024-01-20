@@ -434,7 +434,6 @@ export function persistGraph<T extends GraphSchemaAny>(
     const status = persistObservable(entityTable, {
       local: {
         name,
-        transform: {},
         //@ts-ignore
         //its possible to use field transforms to filter out fields with a null
         //but then you have to supply values for all the keys you want unchanged too which isn't very helpful
@@ -442,13 +441,13 @@ export function persistGraph<T extends GraphSchemaAny>(
           _dict: fieldTransforms,
         },
       }, // IndexedDB table name
-      remote: {
-        offlineBehavior: 'retry',
-        //@ts-ignore
-        fieldTransforms: {
-          _dict: fieldTransforms as any,
-        },
-      },
+      // remote: {
+      //   offlineBehavior: 'retry',
+      //   //@ts-ignore
+      //   fieldTransforms: {
+      //     _dict: fieldTransforms as any,
+      //   },
+      // },
     });
 
     entityStatus.set(name, status.state as any);
