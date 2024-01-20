@@ -1,5 +1,11 @@
 # ts-graph
 
+## 0.1.1
+
+### Patch Changes
+
+- 11e30dc: fix persist status type
+
 ## 0.1.0
 
 ### Minor Changes
