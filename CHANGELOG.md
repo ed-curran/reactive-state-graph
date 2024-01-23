@@ -1,13 +1,16 @@
 # ts-graph
 
+## 0.1.4
 
+### Patch Changes
+
+- c01e082: avoid duplicate exports
 
 ## 0.1.2
 
 ### Patch Changes
 
 - fix persist graph
-
 
 ## 0.1.1
 
