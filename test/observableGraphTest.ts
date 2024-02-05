@@ -96,6 +96,7 @@ test.skip('observable graph', (t) => {
   const aliceUserObservable = chatRoomGraph.create('User', aliceUserEntity);
   const messageObservable = chatRoomGraph.create('Message', messageEntity);
 
+  root.users;
   console.log(
     root.users[0]
       ?.portal(userView)

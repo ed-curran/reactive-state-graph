@@ -24,6 +24,11 @@
       "types": "./oneWayGraph/index.d.ts",
       "require": "./oneWayGraph/index.js",
       "import": "./oneWayGraph/index.mjs"
+    },
+    "./valtio": {
+      "types": "./valtio/index.d.ts",
+      "require": "./valtio/index.js",
+      "import": "./valtio/index.mjs"
     }
   },
   "publishConfig": {
@@ -50,6 +55,7 @@
   },
   "peerDependencies": {
     "@legendapp/state": "2.1.4",
+    "valtio": "^1.13.0",
     "zod": "^3.22.4"
   },
   "tsup": {
@@ -64,7 +70,8 @@
     "entry": [
       "src/index.ts",
       "src/legendState/index.ts",
-      "src/oneWayGraph/index.ts"
+      "src/oneWayGraph/index.ts",
+      "src/valtio/index.ts"
     ]
   },
   "ava": {
@@ -78,5 +85,7 @@
         "/": "build/"
       }
     }
+  },
+  "dependencies": {
   }
 }
