@@ -17,7 +17,7 @@ This is the approach described by Linear for their client side state management 
 Except they use classes and decorators, and we use runtime types and type inference. 
 If you already use zod in your API (i.e. trpc or ts-rest) this may be a good fit for you ;)
 
-Let's have a look. Or alternatively checkout the [playground](https://codesandbox.io/p/sandbox/ts-state-graph-example-p7msm8).
+Let's have a look. Or alternatively checkout the [playground](https://codesandbox.io/p/sandbox/ts-state-graph-valtio-z4t876)
 
 ```typescript
 //describe your entities
@@ -209,6 +209,8 @@ We currently support two full graph implementations. `ValtioGraph` and `Observab
 The `ValtioGraph` implementation uses valtio. 
 It's attractive because of its simplicity. It can be used as in the example above.
 
+Try the [playground](https://codesandbox.io/p/sandbox/ts-state-graph-valtio-z4t876)
+
 Import source and target from legendState in your graph schema file
 ```typescript
 import { source, target } from 'ts-state-graph/valtio';
@@ -257,6 +259,8 @@ This graph implementation uses legend-state, it has the most potential for high 
 
 This is still in development, the client side graph part works although the api is a little clunky, local persistence works, 
 I'm currently working on remote persistence.
+
+Trt the [playground](https://codesandbox.io/p/sandbox/ts-state-graph-legend-state-nzl9ly?file=%2Fsrc%2FmessageList.tsx%3A17%2C13)
 
 Import source and target from legendState in your graph schema file
 ```typescript
