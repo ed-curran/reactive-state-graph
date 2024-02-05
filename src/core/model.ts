@@ -594,5 +594,3 @@ export type DiscriminatedEntityWithId = {
     [key: string]: any;
   };
 };
-
-type Test = Record<string, string>;

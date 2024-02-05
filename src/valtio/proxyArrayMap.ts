@@ -4,8 +4,8 @@ import { Op } from './valtioPool';
 type KeyValRecord<K, V> = [key: K, value: V];
 
 export type ArrayMap<K, V> = Map<K, V> & {
-  readonly index: Map<K, number>;
-  readonly data: KeyValRecord<K, V>[];
+  index: Map<K, number>;
+  data: KeyValRecord<K, V>[];
   toJSON: object;
 };
 
@@ -97,7 +97,7 @@ export function proxyArrayMap<K, V>(
       return this.data.map((p) => p[1]).values();
     },
     entries() {
-      return new Map(this.data).entries();
+      return Array.from(this.data).values();
     },
     get [Symbol.toStringTag]() {
       return 'Map';

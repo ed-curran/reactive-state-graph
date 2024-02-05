@@ -1,4 +1,5 @@
 import {
+  discriminatedEntityId,
   GraphSchemaAny,
   IncomingRelationship,
   InferDiscriminatedEntityWithId,
@@ -20,7 +21,7 @@ import { keyFromArrayMapPath } from './proxyArrayMap';
   I want to make sure I can get local and remote persistence working first before I clean this up
 */
 
-type EntityWithIdAny = { readonly id: string; [key: string]: any };
+export type EntityWithIdAny = { readonly id: string; [key: string]: any };
 
 type Ref<S extends GraphSchemaAny> =
   | {
@@ -385,222 +386,23 @@ export class ValtioGraph<S extends GraphSchemaAny> {
           this.onPoolEntityChange(name, view, ops);
         },
         onDelete: (discriminatedEntity) => {
-          const name = discriminatedEntity.name;
-          const entity = discriminatedEntity.entity;
-          const view = this.viewMap.get(name)!.view;
-          const handledEntityFieldRefs = this.handledEntityFieldRefs.get(name)!;
-
-          //remove this source element from any targets that its materialised on to
-          //we do this by performing a normal replace ref but
-          // with the "current" target undefined
-          if (view.outgoingRelations) {
-            for (const outgoingRelation of view.outgoingRelations) {
-              if (outgoingRelation.target.field) {
-                switch (outgoingRelation.source.type) {
-                  case 'single': {
-                    const prevTargetId = entity[outgoingRelation.source.field];
-
-                    const targets = getTargets(
-                      this.pool,
-                      outgoingRelation.target.model.name,
-                      { current: undefined, prev: prevTargetId },
-                    );
-                    switch (outgoingRelation.target.type) {
-                      case 'single': {
-                        singleToSingle(
-                          {
-                            entity: entity,
-                            //ignore these
-                            field: undefined,
-                            materialisedAs: undefined,
-                          },
-                          {
-                            currentEntity: targets.current,
-                            prevEntity: targets.prev,
-                            materialisedAs: outgoingRelation.target.field,
-                          },
-                          handledEntityFieldRefs,
-                        );
-                        break;
-                      }
-                      case 'collection': {
-                        singleToCollection(
-                          {
-                            entity: entity,
-                            //ignore these
-                            field: undefined,
-                            materialisedAs: undefined,
-                          },
-                          {
-                            currentEntity: targets.current,
-                            prevEntity: targets.prev,
-                            materialisedAs: outgoingRelation.target.field,
-                          },
-                          handledEntityFieldRefs,
-                        );
-                        break;
-                      }
-                    }
-
-                    break;
-                  }
-                  case 'collection': {
-                    if (outgoingRelation.target.type === 'collection') {
-                      continue;
-                    }
-                    //pain
-                    const targetIds = entity[
-                      outgoingRelation.source.field
-                    ] as string[];
-
-                    for (const targetId of targetIds) {
-                      const targets = getTargets(
-                        this.pool,
-                        outgoingRelation.target.model.name,
-                        { current: undefined, prev: targetId },
-                      );
-
-                      collectionToSingle(
-                        {
-                          entity: entity,
-                          //ignore these
-                          field: undefined,
-                          materialisedAs: undefined,
-                        },
-                        {
-                          currentEntity: targets.current,
-                          prevEntity: targets.prev,
-                          materialisedAs: outgoingRelation.target.field,
-                        },
-                        handledEntityFieldRefs,
-                      );
-                    }
-
-                    break;
-                  }
-                }
-              }
-            }
-          }
+          const view = this.viewMap.get(discriminatedEntity.name)!.view;
+          const handledEntityFieldRefs = this.handledEntityFieldRefs.get(
+            discriminatedEntity.name,
+          )!;
+          dematerialiseEntity(
+            discriminatedEntity.entity,
+            view,
+            this.pool,
+            handledEntityFieldRefs,
+          );
         },
-        postSet: (name, entityProxy) => {
-          const view = this.viewMap.get(name)!.view;
-          const outputEntity: EntityWithIdAny = entityProxy;
-          outputEntity.as = function as() {
-            return this;
-          };
+        preSet: (discriminatedEntity) => {
+          const view = this.viewMap.get(discriminatedEntity.name)!.view;
+          const outputEntity: EntityWithIdAny = discriminatedEntity.entity;
 
-          const handledEntityFieldRefs = this.handledEntityFieldRefs.get(name)!;
-          if (view.outgoingRelations) {
-            for (const outgoingRelation of view.outgoingRelations) {
-              if (outgoingRelation.source.materializedAs) {
-                const materialisedField =
-                  outgoingRelation.source.materializedAs;
-                switch (outgoingRelation.source.type) {
-                  case 'single': {
-                    const currentTargetId =
-                      outputEntity[outgoingRelation.source.field];
-
-                    const targets = getTargets(
-                      this.pool,
-                      outgoingRelation.target.model.name,
-                      { current: currentTargetId, prev: undefined },
-                    );
-                    switch (outgoingRelation.target.type) {
-                      case 'single': {
-                        singleToSingle(
-                          {
-                            entity: outputEntity,
-                            field: undefined,
-                            materialisedAs:
-                              outgoingRelation.source.materializedAs, //ignore this
-                          },
-                          {
-                            currentEntity: targets.current,
-                            prevEntity: targets.prev,
-                            materialisedAs: outgoingRelation.target.field,
-                          },
-                          handledEntityFieldRefs,
-                        );
-                        break;
-                      }
-                      case 'collection': {
-                        singleToCollection(
-                          {
-                            entity: outputEntity,
-                            field: undefined,
-                            materialisedAs:
-                              outgoingRelation.source.materializedAs, //ignore this
-                          },
-                          {
-                            currentEntity: targets.current,
-                            prevEntity: targets.prev,
-                            materialisedAs: outgoingRelation.target.field,
-                          },
-                          handledEntityFieldRefs,
-                        );
-                        break;
-                      }
-                    }
-
-                    break;
-                  }
-                  case 'collection': {
-                    if (outgoingRelation.target.type === 'collection') {
-                      continue;
-                    }
-                    //pain
-                    const targetIds = outputEntity[
-                      outgoingRelation.source.field
-                    ] as string[];
-
-                    outputEntity[materialisedField] = [];
-                    for (const targetId of targetIds) {
-                      const targets = getTargets(
-                        this.pool,
-                        outgoingRelation.target.model.name,
-                        { current: targetId, prev: undefined },
-                      );
-
-                      collectionToSingle(
-                        {
-                          entity: outputEntity,
-                          field: undefined,
-                          materialisedAs:
-                            outgoingRelation.source.materializedAs, //ignore this
-                        },
-                        {
-                          currentEntity: targets.current,
-                          prevEntity: targets.prev,
-                          materialisedAs: outgoingRelation.target.field,
-                        },
-                        handledEntityFieldRefs,
-                      );
-                    }
-
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          if (view.incomingRelations) {
-            for (const incomingRelation of view.incomingRelations) {
-              if (incomingRelation.target.field) {
-                const materialisedField = incomingRelation.target.field;
-                switch (incomingRelation.target.type) {
-                  case 'single': {
-                    outputEntity[materialisedField] = null;
-                    break;
-                  }
-                  case 'collection': {
-                    outputEntity[materialisedField] = [];
-                    break;
-                  }
-                }
-              }
-            }
-          }
+          initGraphEntity(outputEntity, view);
+          return outputEntity;
         },
       },
     });
@@ -610,6 +412,10 @@ export class ValtioGraph<S extends GraphSchemaAny> {
         new Set(),
       ]),
     );
+  }
+
+  getSchema(): S {
+    return this.schema;
   }
 
   getViews() {
@@ -628,7 +434,33 @@ export class ValtioGraph<S extends GraphSchemaAny> {
     rootSnapshot: InferPoolRootEntityWithId<S['poolSchema']>['entity'],
     entities?: InferPoolEntityWithId<S['poolSchema']>[],
   ): InferGraphRootResolvedEntity<S> {
-    return this.pool.createRoot(rootSnapshot, entities);
+    //create the root and entities in a batch
+    //so add them to pool first
+    const rootProxy = this.pool.createRoot(rootSnapshot);
+    const createdEntities = (entities ?? []).map(({ name, entity }) => ({
+      name,
+      entityProxy: this.pool.createEntity({ name, entity }),
+    }));
+
+    //then materialise
+    this.materialiseEntity(this.schema.rootView.model.name, rootProxy);
+    for (const entity of createdEntities) {
+      this.materialiseEntity(entity.name, entity.entityProxy);
+    }
+
+    return rootProxy;
+  }
+
+  materialiseEntity<T extends InferPoolEntityName<S['poolSchema']>>(
+    name: T,
+    entityProxy: Extract<
+      InferPoolEntityWithId<S['poolSchema']>,
+      { name: T }
+    >['entity'],
+  ): void {
+    const view = this.viewMap.get(name)!.view;
+    const handledEntityFieldRefs = this.handledEntityFieldRefs.get(name)!;
+    materialiseEntity(entityProxy, view, this.pool, handledEntityFieldRefs);
   }
 
   create<T extends InferPoolEntityName<S['poolSchema']>>(
@@ -638,7 +470,11 @@ export class ValtioGraph<S extends GraphSchemaAny> {
       { name: T }
     >['entity'],
   ): InferView<Extract<InferGraphView<S>, { model: { name: T } }>> {
-    return this.pool.createEntity({ name, entity });
+    const createdEntity = this.pool.createEntity({ name, entity });
+    //syncronously materialise the entity
+    //so the returned entity is as expected
+    this.materialiseEntity(name, createdEntity);
+    return createdEntity;
   }
 
   get<T extends InferPoolEntityName<S['poolSchema']>>(
@@ -656,11 +492,6 @@ export class ValtioGraph<S extends GraphSchemaAny> {
   }
 }
 
-type RelationEntities = {
-  sourceEntity: EntityWithIdAny;
-  currentTargetEntity: EntityWithIdAny | undefined;
-  prevTargetEntity: EntityWithIdAny | undefined;
-};
 //seems dumb
 function getTargets<S extends PoolSchemaAny>(
   pool: ValtioPool<S>,
@@ -848,6 +679,240 @@ function collectionToSingle(
       handledFields.add(
         entityFieldRef(target.currentEntity.id, target.materialisedAs),
       );
+    }
+  }
+}
+
+function materialiseEntity<S extends GraphSchemaAny>(
+  entityProxy: InferPoolEntityWithId<S['poolSchema']>['entity'],
+  view: InferGraphView<S>,
+  pool: ValtioPool<S['poolSchema']>,
+  handledEntityFieldRefs: Set<string>,
+) {
+  if (!view.outgoingRelations) return;
+
+  for (const outgoingRelation of view.outgoingRelations) {
+    switch (outgoingRelation.source.type) {
+      case 'single': {
+        const currentTargetId = entityProxy[outgoingRelation.source.field];
+        const targets = getTargets(pool, outgoingRelation.target.model.name, {
+          current: currentTargetId,
+          prev: undefined,
+        });
+
+        switch (outgoingRelation.target.type) {
+          case 'single': {
+            singleToSingle(
+              {
+                entity: entityProxy,
+                field: undefined,
+                materialisedAs: outgoingRelation.source.materializedAs, //ignore this
+              },
+              {
+                currentEntity: targets.current,
+                prevEntity: targets.prev,
+                materialisedAs: outgoingRelation.target.field,
+              },
+              handledEntityFieldRefs,
+            );
+            break;
+          }
+          case 'collection': {
+            singleToCollection(
+              {
+                entity: entityProxy,
+                field: undefined,
+                materialisedAs: outgoingRelation.source.materializedAs, //ignore this
+              },
+              {
+                currentEntity: targets.current,
+                prevEntity: targets.prev,
+                materialisedAs: outgoingRelation.target.field,
+              },
+              handledEntityFieldRefs,
+            );
+            break;
+          }
+        }
+        break;
+      }
+      case 'collection': {
+        if (outgoingRelation.target.type === 'collection') {
+          continue;
+        }
+        //pain
+        const targetIds = entityProxy[
+          outgoingRelation.source.field
+        ] as string[];
+
+        for (const targetId of targetIds) {
+          const targets = getTargets(pool, outgoingRelation.target.model.name, {
+            current: targetId,
+            prev: undefined,
+          });
+
+          collectionToSingle(
+            {
+              entity: entityProxy,
+              field: undefined,
+              materialisedAs: outgoingRelation.source.materializedAs, //ignore this
+            },
+            {
+              currentEntity: targets.current,
+              prevEntity: targets.prev,
+              materialisedAs: outgoingRelation.target.field,
+            },
+            handledEntityFieldRefs,
+          );
+        }
+
+        break;
+      }
+    }
+  }
+}
+
+function dematerialiseEntity<S extends GraphSchemaAny>(
+  entityProxy: InferPoolEntityWithId<S['poolSchema']>['entity'],
+  view: InferGraphView<S>,
+  pool: ValtioPool<S['poolSchema']>,
+  handledEntityFieldRefs: Set<string>,
+) {
+  if (!view.outgoingRelations) return;
+
+  //remove this source element from any targets that its materialised on to
+  //we do this by performing a normal replace ref but
+  // with the "current" target undefined
+  for (const outgoingRelation of view.outgoingRelations) {
+    if (!outgoingRelation.target.field) {
+      continue;
+    }
+    switch (outgoingRelation.source.type) {
+      case 'single': {
+        const prevTargetId = entityProxy[outgoingRelation.source.field];
+
+        const targets = getTargets(pool, outgoingRelation.target.model.name, {
+          current: undefined,
+          prev: prevTargetId,
+        });
+        switch (outgoingRelation.target.type) {
+          case 'single': {
+            singleToSingle(
+              {
+                entity: entityProxy,
+                //ignore these
+                field: undefined,
+                materialisedAs: undefined,
+              },
+              {
+                currentEntity: targets.current,
+                prevEntity: targets.prev,
+                materialisedAs: outgoingRelation.target.field,
+              },
+              handledEntityFieldRefs,
+            );
+            break;
+          }
+          case 'collection': {
+            singleToCollection(
+              {
+                entity: entityProxy,
+                //ignore these
+                field: undefined,
+                materialisedAs: undefined,
+              },
+              {
+                currentEntity: targets.current,
+                prevEntity: targets.prev,
+                materialisedAs: outgoingRelation.target.field,
+              },
+              handledEntityFieldRefs,
+            );
+            break;
+          }
+        }
+
+        break;
+      }
+      case 'collection': {
+        if (outgoingRelation.target.type === 'collection') {
+          continue;
+        }
+        //pain
+        const targetIds = entityProxy[
+          outgoingRelation.source.field
+        ] as string[];
+
+        for (const targetId of targetIds) {
+          const targets = getTargets(pool, outgoingRelation.target.model.name, {
+            current: undefined,
+            prev: targetId,
+          });
+
+          collectionToSingle(
+            {
+              entity: entityProxy,
+              //ignore these
+              field: undefined,
+              materialisedAs: undefined,
+            },
+            {
+              currentEntity: targets.current,
+              prevEntity: targets.prev,
+              materialisedAs: outgoingRelation.target.field,
+            },
+            handledEntityFieldRefs,
+          );
+        }
+
+        break;
+      }
+    }
+  }
+}
+
+function initGraphEntity<S extends GraphSchemaAny>(
+  entity: EntityWithIdAny,
+  view: InferGraphView<S>,
+) {
+  entity.as = function as() {
+    return this;
+  };
+
+  if (view.outgoingRelations) {
+    for (const outgoingRelation of view.outgoingRelations) {
+      if (!outgoingRelation.source.materializedAs) {
+        continue;
+      }
+      const materialisedField = outgoingRelation.source.materializedAs;
+      switch (outgoingRelation.source.type) {
+        case 'single': {
+          entity[materialisedField] = undefined;
+          break;
+        }
+        case 'collection': {
+          entity[materialisedField] = [];
+          //pain
+          break;
+        }
+      }
+    }
+  }
+
+  if (view.incomingRelations) {
+    for (const incomingRelation of view.incomingRelations) {
+      if (!incomingRelation.target.field) continue;
+      const materialisedField = incomingRelation.target.field;
+      switch (incomingRelation.target.type) {
+        case 'single': {
+          entity[materialisedField] = null;
+          break;
+        }
+        case 'collection': {
+          entity[materialisedField] = [];
+          break;
+        }
+      }
     }
   }
 }

@@ -102,7 +102,7 @@ class ValtioPoolState<S extends PoolSchemaAny> {
     const snapshotEntity: InferPoolEntityWithId<S>[] = [];
     for (const [entityName, table] of this.entityTables) {
       const tableSnapshot = snapshot(table);
-      for (const [entityId, entity] of tableSnapshot) {
+      for (const [entityId, entity] of tableSnapshot.data) {
         snapshotEntity.push({
           name: entityName,
           entity: entity,
@@ -121,75 +121,36 @@ class ValtioPoolState<S extends PoolSchemaAny> {
   }
 }
 
-// export interface ValtioMutationHandler<S extends PoolSchemaAny> {
-//   //this gets called before the mutation is applied to the pool
-//   preCreate?: (
-//     discriminatedEntity: InferPoolEntityWithId<S>,
-//   ) => InferPoolEntityWithId<S>['entity'];
-//
-//   //this gets called after the mutation is applied to the pool
-//   //and hence provides reference to the proxy
-//   onEntityChange?: (name: InferPoolEntityName<S>, ops: Op[]) => void;
-//   postCreate?: (
-//     name: InferPoolEntityName<S>,
-//     discriminatedEntity: InferPoolEntityWithId<S>['entity'],
-//   ) => void;
-// }
 export interface ValtioPoolOptions<S extends PoolSchemaAny> {
   listeners: ValtioPoolStateListeners<S>;
 }
 export class ValtioPool<S extends PoolSchemaAny> {
-  private rootState: InferPoolRootEntity<S> | undefined;
-  private schema: S;
-  private state: ValtioPoolState<S>;
+  private rootEntity: InferPoolRootEntity<S> | undefined;
+  private readonly schema: S;
+  private readonly state: ValtioPoolState<S>;
 
   constructor(schema: S, options: ValtioPoolOptions<S> = { listeners: {} }) {
     this.schema = schema;
-    this.rootState = undefined;
-    this.state = new ValtioPoolState<S>(this.schema, {
-      onChange: (name, ops) => {
-        options.listeners.onChange?.(name, ops);
-        if (
-          this.rootState === undefined &&
-          name === this.schema.rootModel.name
-        ) {
-          for (const change of ops) {
-            const [op, path, current, prev] = change;
-
-            if (path.length === 1) {
-              //got a change that sets the whole table (i.e. been loaded in from storage)
-            } else if (path.length === 3) {
-              const entity = current as InferPoolEntityWithId<S>['entity'];
-              this.rootState = entity as InferPoolRootEntity<S>;
-            }
-          }
-        }
-      },
-      ...options.listeners,
-    });
+    this.rootEntity = undefined;
+    this.state = new ValtioPoolState<S>(this.schema, options.listeners);
   }
 
   createRoot(
     root: InferPoolRootEntityWithId<S>['entity'],
-    entities?: InferPoolEntityWithId<S>[] | undefined,
-  ): InferPoolRootEntity<S> {
+  ): InferPoolRootEntityWithId<S>['entity'] {
     const createdRoot = this.state.set({
       name: this.schema.rootModel.name,
       entity: root,
     });
-    if (entities) {
-      for (const entity of entities) {
-        this.createEntity(entity);
-      }
-    }
+    this.rootEntity = createdRoot;
 
-    return createdRoot;
+    return createdRoot as InferPoolRootEntityWithId<S>['entity'];
   }
   createEntity<T extends InferPoolEntityWithId<S>>(entity: T): T['entity'] {
     return this.state.set(entity);
   }
   getRoot(): InferPoolRootEntity<S> | undefined {
-    return this.rootState;
+    return this.rootEntity;
   }
   getEntity<
     N extends InferPoolEntityName<S>,
