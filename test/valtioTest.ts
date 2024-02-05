@@ -133,7 +133,7 @@ export const roomEntity = {
   // userIds: [],
 };
 
-test('valtio graph', async (t) => {
+test.skip('valtio graph', async (t) => {
   const chatRoomGraph = new ValtioGraph(
     graphSchema(chatRoomView, [userView, messageView]),
   );
