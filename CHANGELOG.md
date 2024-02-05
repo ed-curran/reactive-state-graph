@@ -1,5 +1,11 @@
 # ts-graph
 
+## 0.2.0
+
+### Minor Changes
+
+- ce9e158: Add Valtio Graph Implementation
+
 ## 0.1.4
 
 ### Patch Changes
