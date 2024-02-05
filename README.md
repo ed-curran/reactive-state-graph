@@ -190,22 +190,70 @@ root.owner.as(userView).inbox[0].as(messageView).author.name // -> type string
 
 
 ## Graph Implementations
-These inferred types are actually for a simplified graph implementation, called oneWayGraph, 
-which isn't suitable for real apps. ts-state-graph can support different graph implementations, where an implementation can control how the type of a view is inferred by exporting 
-their own `source` and `target` functions. 
+ts-state-graph can support different graph implementations, where an implementation can control how the type of a view is inferred by exporting 
+their own `source` and `target` functions. The example above works with `ValtioGraph`.
 
 Different implementations will have a big impact on how your frontend is written, 
 so  you can't just swap them out whenever you feel. It's more so that you (or your community) can write a graph 
 implementation for your favourite state management library.
 
 
-The natural fit is observables (or signals or whatever you want to call them). It's probably possible to do it with immutable objects if you resolve references at the point of traversal.
+The natural fit is mutable state with observables (or signals or whatever you want to call them). 
+It's probably possible to do it with immutable objects if you resolve references at the point of traversal, 
+and use something like immer to track changes, or calculate diffs separately.
 
+We currently support two full graph implementations. `ValtioGraph` and `ObservableGraph` (uses legend-state)
+
+## Valtio Graph
+
+The `ValtioGraph` implementation uses valtio. 
+It's attractive because of its simplicity. It can be used as in the example above.
+
+Import source and target from legendState in your graph schema file
+```typescript
+import { source, target } from 'ts-state-graph/valtio';
+
+///rest of your schema
+...
+```
+
+Instantiate your graph
+
+```typescript
+import { ValtoGraph } from 'ts-state-graph/valtio';
+
+export const graph = new ValtioGraph(chatRoomGraphSchema);
+```
+
+Use it!
+
+
+```ts
+const chatRoomState = graph.createRoot(
+    {
+      id: 'mainRoom',
+      ownerId: 'owner',
+    },
+    [
+      {
+        name: 'User',
+        entity: {
+          id: 'owner',
+          name: 'owner',
+          roomId: 'mainRoom',
+        },
+      },
+    ],
+  )
+
+
+//the graph is traversed the same as the example above
+chatRoomState.users[0].name = 'fred'
+```
 
 ## Observable Graph
 
-ts-state-graph contains a proper graph implementation that uses legend-state,
-because the built-in persistence functionality looked promising for multiplayer web apps.
+This graph implementation uses legend-state, it has the most potential for high performance, but the DX is not ideal.
 
 This is still in development, the client side graph part works although the api is a little clunky, local persistence works, 
 I'm currently working on remote persistence.
@@ -260,7 +308,7 @@ const chatRoomState = (graph.getRoot() ??
   )) as ObservableObject<ChatRoomView>;
 
 
-//the graph is traversed differently than in the oneWayGraph
+//the graph is traversed differently than in the ValtioGraph and OneWayGraph
 chatRoomState.owner.portal(userView).name
 
 chatRoomState.owner.portal(userView).name.onChange(() => {})  //will fire if this user's name changes, but not if the room owner is changed

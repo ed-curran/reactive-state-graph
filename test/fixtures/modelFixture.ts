@@ -15,6 +15,7 @@ export const userModel = model({
     id: identifier(),
     name: z.string(),
     roomId: reference(),
+    bestFriendId: z.string().optional(),
   },
 });
 
@@ -41,6 +42,7 @@ export const aliceUserEntity = {
   id: '2',
   name: 'alice',
   roomId: 'TestRoom',
+  bestFriendId: undefined,
 };
 export const messageEntity = {
   id: '3',

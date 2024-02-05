@@ -1,4 +1,4 @@
-import z from 'zod';
+import z, { ZodUndefined } from 'zod';
 
 export const identifier = z.string;
 export const reference = z.string;
@@ -37,7 +37,7 @@ export type WithCardinality<C extends Cardinality, E extends any> = {
   type: C;
 } & E;
 
-export type AnyRef = WithCardinality<Cardinality, RefBase<ModelAny, any>>
+export type AnyRef = WithCardinality<Cardinality, RefBase<ModelAny, any>>;
 
 export type RefKeysByCardinality<
   S extends z.ZodRawShape,
@@ -51,50 +51,49 @@ export type RefKey<S extends z.ZodRawShape> = (
   string;
 
 export type SingleRefKey<S extends z.ZodRawShape> = keyof {
-  [K in keyof S as S[K] extends z.ZodString ? K : never]: S[K];
+  [K in keyof S as S[K] extends z.ZodString | z.ZodOptional<z.ZodString>
+    ? K
+    : never]: S[K];
 };
 
 export type CollectionRefKeys<S extends z.ZodRawShape> = keyof {
   [K in keyof S as S[K] extends z.ZodArray<z.ZodString> ? K : never]: S[K];
 };
 
-export type InferCardinality<
-  S extends z.ZodRawShape,
-  K extends RefKey<S>,
-> = S[K] extends z.ZodArray<z.ZodString> ? 'collection' : 'single';
+export type InferCardinality<S extends z.ZodRawShape, K extends RefKey<S>> =
+  S[K] extends z.ZodArray<z.ZodString> ? 'collection' : 'single';
 
-type TargetRefAny = TargetRef<ModelAny, string | undefined, any, any>
-type SourceRefAny = SourceRef<ModelAny, string, string | undefined, any, any>
+type TargetRefAny = TargetRef<ModelAny, string | undefined, any, any>;
+type SourceRefAny = SourceRef<ModelAny, string, string | undefined, any, any>;
 
-export function single<
-  Ref extends SourceRefAny
->(
+export function single<Ref extends SourceRefAny>(
   source: Ref,
 ): {
   type: 'single';
   model: Ref['model'];
   field: Ref['field'];
   materializedAs: Ref['materializedAs'];
-  _outputSingle: Ref['_outputSingle']
-  _outputCollection: Ref['_outputCollection']
+  _outputSingle: Ref['_outputSingle'];
+  _outputCollection: Ref['_outputCollection'];
 };
 export function single<Ref extends TargetRefAny>(
   sourceOrTarget: Ref,
-): { type: 'single'; model: Ref['model']; field: Ref['field'],  _outputSingle: Ref['_outputSingle']
-_outputCollection: Ref['_outputCollection'] };
-export function single<
-  Ref extends
-    | TargetRefAny
-    | SourceRefAny,
->(
+): {
+  type: 'single';
+  model: Ref['model'];
+  field: Ref['field'];
+  _outputSingle: Ref['_outputSingle'];
+  _outputCollection: Ref['_outputCollection'];
+};
+export function single<Ref extends TargetRefAny | SourceRefAny>(
   sourceOrTarget: Ref,
 ): {
   type: 'single';
   model: Ref['model'];
   field: Ref['field'];
   materializedAs?: string;
-  _outputSingle: Ref['_outputSingle']
-  _outputCollection: Ref['_outputCollection']
+  _outputSingle: Ref['_outputSingle'];
+  _outputCollection: Ref['_outputCollection'];
 } {
   return {
     type: 'single',
@@ -102,27 +101,26 @@ export function single<
   };
 }
 
-export function collection<
-  Ref extends SourceRefAny,
->(
+export function collection<Ref extends SourceRefAny>(
   sourceOrTarget: Ref,
 ): {
   type: 'collection';
   model: Ref['model'];
   field: Ref['field'];
   materializedAs: Ref['materializedAs'];
-  _outputSingle: Ref['_outputSingle']
-  _outputCollection: Ref['_outputCollection']
+  _outputSingle: Ref['_outputSingle'];
+  _outputCollection: Ref['_outputCollection'];
 };
 export function collection<Ref extends TargetRefAny>(
   sourceOrTarget: Ref,
-): { type: 'collection'; model: Ref['model']; field: Ref['field'],   _outputSingle: Ref['_outputSingle']
-_outputCollection: Ref['_outputCollection'] };
-export function collection<
-  Ref extends
-    | TargetRefAny
-    | SourceRefAny,
->(
+): {
+  type: 'collection';
+  model: Ref['model'];
+  field: Ref['field'];
+  _outputSingle: Ref['_outputSingle'];
+  _outputCollection: Ref['_outputCollection'];
+};
+export function collection<Ref extends TargetRefAny | SourceRefAny>(
   sourceOrTarget: Ref,
 ): {
   type: 'collection';
@@ -216,8 +214,8 @@ export type SourceRef<
   model: M;
   field: F;
   materializedAs: R;
-  _outputSingle: OS
-  _outputCollection: OS
+  _outputSingle: OS;
+  _outputCollection: OC;
 };
 
 // export function source<
@@ -227,32 +225,31 @@ export type SourceRef<
 //   return { model, field };
 // }
 
-export type SourceBuilder< M extends ModelAny,
-F extends keyof ModelShape<M> & string,
-OS,
-OC> = {
+export type SourceBuilder<
+  M extends ModelAny,
+  F extends keyof ModelShape<M> & string,
+  OS,
+  OC,
+> = {
   model: M;
   field: F;
   materializedAs: undefined;
-  _outputSingle: OS,
-  _outputCollection: OC,
+  _outputSingle: OS;
+  _outputCollection: OC;
   as: <R extends string>(renamed: R) => SourceRef<M, F, R, OS, OC>;
   auto: F extends `${infer R}Id`
     ? () => SourceRef<M, F, R, OS, OC>
     : F extends `${infer R}Ids`
       ? () => SourceRef<M, F, `${R}s`, OS, OC>
       : never;
-}
+};
 
 export function _source<
   M extends ModelAny,
   F extends keyof ModelShape<M> & string,
   OS,
-  OC
->(
-  model: M,
-  field: F,
-): SourceBuilder<M, F, OS, OC> {
+  OC,
+>(model: M, field: F): SourceBuilder<M, F, OS, OC> {
   return {
     model,
     field,
@@ -264,14 +261,22 @@ export function _source<
       field,
       materializedAs,
       _outputSingle: null as any,
-      _outputCollection: null as any
+      _outputCollection: null as any,
     }),
     auto: (() => {
       const inferredMaterializedAs = field.endsWith('Id')
         ? field.substring(0, field.length - 2)
-        : 'default';
+        : field.endsWith('Ids')
+          ? field.substring(0, field.length - 3) + 's'
+          : 'default';
 
-      return { model, field, materializedAs: inferredMaterializedAs }; //yay type hacks
+      return {
+        model,
+        field,
+        materializedAs: inferredMaterializedAs,
+        _outputSingle: null as any,
+        _outputCollection: null as any,
+      }; //yay type hacks
     }) as any, //dude idk
   };
 }
@@ -327,20 +332,25 @@ export function _source<
 //   return { model, field, renamed: inferredRenamed} as any; //yay more type hacks
 // }
 
-export type TargetRef<M extends ModelAny, F extends string | undefined, OS, OC> = {
+export type TargetRef<
+  M extends ModelAny,
+  F extends string | undefined,
+  OS,
+  OC,
+> = {
   model: M;
   field: F;
-  _outputSingle: OS
-  _outputCollection: OC
+  _outputSingle: OS;
+  _outputCollection: OC;
 };
 
 export type TargetBuilder<M extends ModelAny, OS, OC> = {
   model: M;
   field: undefined;
-  _outputSingle: OS,
-  _outputCollection: OC,
+  _outputSingle: OS;
+  _outputCollection: OC;
   as: <F extends string>(field: F) => TargetRef<M, F, OS, OC>;
-}
+};
 export function _target<M extends ModelAny, OS, OC>(
   model: M,
 ): TargetBuilder<M, OS, OC> {
@@ -353,7 +363,7 @@ export function _target<M extends ModelAny, OS, OC>(
       model,
       field,
       _outputSingle: null as any,
-      _outputCollection: null as any
+      _outputCollection: null as any,
     }),
   };
 }
@@ -370,15 +380,15 @@ export type Relationship<
   OSS,
   OSC,
   OTS,
-  OTC
+  OTC,
 > = {
   source: WithCardinality<SC, SourceRef<SM, SF, SR, OSS, OSC>>;
   target: WithCardinality<TC, TargetRef<TM, TF, OTS, OTC>>;
   //please ignore
-  readonly _outputSourceSingle: OSS
-  readonly _outputSourceCollection: OSC
-  readonly _outputTargetSingle: OTS
-  readonly _outputTargetCollection: OTC
+  readonly _outputSourceSingle: OSS;
+  readonly _outputSourceCollection: OSC;
+  readonly _outputTargetSingle: OTS;
+  readonly _outputTargetCollection: OTC;
 };
 
 // type Relationship<
@@ -402,7 +412,7 @@ export type OutgoingRelationship<SM extends ModelAny> = Relationship<
   ModelAny,
   string | undefined,
   any,
-  any,  
+  any,
   any,
   any
 >;
@@ -449,7 +459,7 @@ export function relationship<
   OSS,
   OSC,
   OTS,
-  OTC
+  OTC,
 >(
   source: WithCardinality<SC, SourceRef<SM, SF, SR, OSS, OSC>>,
   target: WithCardinality<TC, TargetRef<TM, TF, OTS, OTC>>,
@@ -464,8 +474,6 @@ export function relationship<
   };
 }
 
-
-
 export function oneToOne<
   SM extends ModelAny,
   SF extends SingleRefKey<ModelShape<SM>> & string,
@@ -475,7 +483,7 @@ export function oneToOne<
   OSS,
   OSC,
   OTS,
-  OTC
+  OTC,
 >(
   source: SourceRef<SM, SF, SR, OSS, OSC>,
   target: TargetRef<TM, TF, OTS, OTC>,
@@ -492,11 +500,23 @@ export function oneToMany<
   OSS,
   OSC,
   OTS,
-  OTC
+  OTC,
 >(
   source: SourceRef<SM, SF, SR, OSS, OSC>,
   target: TargetRef<TM, TF, OTS, OTC>,
-): Relationship<'collection', SM, SF, SR, 'single', TM, TF, OSS, OSC, OTS, OTC> {
+): Relationship<
+  'collection',
+  SM,
+  SF,
+  SR,
+  'single',
+  TM,
+  TF,
+  OSS,
+  OSC,
+  OTS,
+  OTC
+> {
   return relationship(collection(source), single(target));
 }
 
@@ -509,14 +529,25 @@ export function manyToOne<
   OSS,
   OSC,
   OTS,
-  OTC
+  OTC,
 >(
   source: SourceRef<SM, SF, SR, OSS, OSC>,
   target: TargetRef<TM, TF, OTS, OTC>,
-): Relationship<'single', SM, SF, SR, 'collection', TM, TF,  OSS, OSC, OTS, OTC> {
+): Relationship<
+  'single',
+  SM,
+  SF,
+  SR,
+  'collection',
+  TM,
+  TF,
+  OSS,
+  OSC,
+  OTS,
+  OTC
+> {
   return relationship(single(source), collection(target));
 }
-
 
 //is this even possible?
 // export function manyToMany<
@@ -538,10 +569,6 @@ export function manyToOne<
 //because we won't be typechecking it properly due to using RelationshipAny
 
 // type OneToOne<SE extends z.ZodRawShape, TE extends z.ZodRawShape> = ReturnType<typeof oneToOne<SE, SF extends keyof SE, >>
-
-
-
-
 
 //this conditional is needed to distribute over the members of the union
 //so that we can discriminate over it as expected later

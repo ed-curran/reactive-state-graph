@@ -65,22 +65,3 @@ export interface Graph<S extends GraphSchemaAny> {
   getRoot(): InferGraphRootResolvedEntity<S> | undefined;
   getPool(): MutablePool<S['poolSchema']>;
 }
-
-function targetIds<M extends ModelAny, S extends OutgoingRelationship<M>>(
-  sourceEntity: InferEntity<M>,
-  outgoingRelation: S,
-): ReadonlyArray<string> {
-  const targetIds = new Array<string>();
-  switch (outgoingRelation.source.type) {
-    case 'single': {
-      const relationTargetId = sourceEntity[
-        outgoingRelation.source.field
-      ] as string;
-      targetIds.push(relationTargetId);
-      return [relationTargetId];
-    }
-    case 'collection': {
-      return sourceEntity[outgoingRelation.source.field] as string[];
-    }
-  }
-}

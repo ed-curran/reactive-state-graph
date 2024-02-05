@@ -115,7 +115,7 @@ type InferReferenceOutput<
   R extends AnyRef,
   S,
   C,
-> = R['type'] extends 'collection' ? S : C;
+> = R['type'] extends 'collection' ? C : S;
 
 type ExcludeUndefined<T> = T extends undefined ? never : T;
 
@@ -127,7 +127,7 @@ type ResolvedIncoming<
   readonly [P in R as ExcludeUndefined<
     P['target']['field']
   >]: InferReferenceOutput<
-    P['source'],
+    P['target'],
     P['_outputSourceSingle'],
     P['_outputSourceCollection']
   >;
@@ -142,11 +142,28 @@ type ResolvedOutgoing<
   [P in R as ExcludeUndefined<
     P['source']['materializedAs']
   >]: InferReferenceOutput<
-    P['target'],
+    P['source'],
     P['_outputTargetSingle'],
     P['_outputTargetCollection']
   >;
 } extends infer O
+  ? { [K in keyof O]: O[K] }
+  : never;
+
+export type ObjectWithAs<M extends ModelAny> = {
+  as: <
+    Q extends Query<
+      M,
+      TypedArray<OutgoingRelationship<M>>,
+      TypedArray<IncomingRelationship<M>>
+    >,
+  >(
+    view: Q,
+  ) => InferView<Q>;
+};
+
+export type ResolvedBaseEntity<M extends ModelAny> = z.infer<M['schema']> &
+  ObjectWithAs<M> extends infer O
   ? { [K in keyof O]: O[K] }
   : never;
 
@@ -155,7 +172,7 @@ type ResolvedQueryShape<
   O extends TypedArray<OutgoingRelationship<M>>,
   I extends TypedArray<IncomingRelationship<M>>,
 > = ResolvedIncoming<
-  ResolvedOutgoing<z.infer<M['schema']>, O[number]>,
+  ResolvedOutgoing<ResolvedBaseEntity<M>, O[number]>,
   I[number]
 >;
 
