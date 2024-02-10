@@ -1,4 +1,4 @@
-import { identifier, model, reference } from '../../src';
+import { identifier, InferEntity, model, reference } from '../../src';
 import z from 'zod';
 
 export const chatRoomModel = model({
@@ -18,6 +18,7 @@ export const userModel = model({
     bestFriendId: z.string().optional(),
   },
 });
+export type User = InferEntity<typeof userModel>;
 
 export const messageModel = model({
   name: 'Message',

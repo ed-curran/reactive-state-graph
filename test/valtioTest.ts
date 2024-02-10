@@ -2,6 +2,7 @@ import test from 'ava';
 import {
   graphSchema,
   identifier,
+  InferEntity,
   InferView,
   manyToOne,
   model,
@@ -19,7 +20,7 @@ import {
 } from './fixtures/modelFixture';
 import { source, target, ValtioGraph, ValtioPool } from '../src/valtio';
 import z from 'zod';
-import { proxy, subscribe } from 'valtio/vanilla';
+import { proxy, snapshot, subscribe } from 'valtio/vanilla';
 import { proxyArrayMap } from '../src/valtio/proxyArrayMap';
 const chatRoomModel = model({
   name: 'ChatRoom',
@@ -39,6 +40,8 @@ const userModel = model({
     bestFriendId: z.string().optional(),
   },
 });
+
+export type User = InferEntity<typeof userModel>;
 
 // const roomUserRel = oneToMany(
 //   source(chatRoomModel, 'userIds'),
@@ -137,19 +140,29 @@ test.skip('valtio graph', async (t) => {
   const chatRoomGraph = new ValtioGraph(
     graphSchema(chatRoomView, [userView, messageView]),
   );
-  const root = chatRoomGraph.createRoot(roomEntity, []);
+  const root = chatRoomGraph.createRoot(roomEntity, [
+    {
+      name: 'User',
+      entity: {
+        id: '1',
+        name: 'ed',
+        roomId: 'TestRoom',
+        bestFriendId: undefined,
+      },
+    },
+  ]);
   // const fred = chatRoomGraph.create('User', {
   //   id: '4',
   //   name: 'fred',
   //   roomId: 'TestRoom',
   //   bestFriendId: undefined,
   // });
-  const ed = chatRoomGraph.create('User', {
-    id: '1',
-    name: 'ed',
-    roomId: 'TestRoom',
-    bestFriendId: undefined,
-  });
+  // const ed = chatRoomGraph.create('User', {
+  //   id: '1',
+  //   name: 'ed',
+  //   roomId: 'TestRoom',
+  //   bestFriendId: undefined,
+  // });
   // const alice = chatRoomGraph.create('User', aliceUserEntity);
   const message = chatRoomGraph.create('Message', {
     id: '3',
@@ -179,7 +192,6 @@ test.skip('valtio graph', async (t) => {
   await sleep(1000);
   console.log('slept');
   console.log(root);
-  console.log(ed);
   chatRoomGraph.delete('Message', message.id);
   await sleep(1000);
   console.log('slept');
