@@ -1,5 +1,11 @@
 # ts-graph
 
+## 0.2.2
+
+### Patch Changes
+
+- 56c6bf0: Add valto graph local persistence
+
 ## 0.2.0
 
 ### Minor Changes
