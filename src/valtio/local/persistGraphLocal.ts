@@ -1,30 +1,19 @@
-import { EntityWithIdAny, ValtioGraph } from './valtioGraph';
-import {
-  GraphSchemaAny,
-  InferPoolEntityName,
-  InferPoolEntityWithId,
-} from '../core';
-import { openDB, deleteDB, wrap, unwrap, DBSchema } from 'idb';
+import { EntityWithIdAny, ValtioGraph } from '../valtioGraph';
+import { GraphSchemaAny } from '../../core';
+import { openDB } from 'idb';
 import { proxy, snapshot, subscribe } from 'valtio/vanilla';
-import { keyFromArrayMapPath, proxyArrayMap } from './proxyArrayMap';
-import { string } from 'zod';
+import { keyFromArrayMapPath, proxyArrayMap } from '../proxyArrayMap';
 
 export interface PersistLocalOptions {
   name: string;
   version: number;
   autoFlush?:
     | {
-        duration: number;
+        interval: number;
       }
     | false;
 }
 
-// interface MyDB extends DBSchema {
-//   [key: string]: {
-//     key: string;
-//     value: EntityWithIdAny;
-//   };
-// }
 export interface EntityPersistStatus {
   loaded: boolean;
 }
@@ -142,46 +131,7 @@ async function doPersistGraphLocal<S extends GraphSchemaAny>(
     //then we'll fire of the commands in a single async transaction
     //and return early (before the transaction completes)
     //this seems like the best way to not end up with weird async race conditions (hopefully)
-    const commands: FlushCommand[] = [];
-    for (const [name, cache] of dirtyEntityCaches) {
-      if (cache.dirtyEntities.length === 0) continue;
-      const flushCommand: FlushCommand = {
-        entityName: name,
-        entities: [],
-      };
-      const viewIndex = graph.getViews().get(name)!;
-      for (const dirtyEntity of cache.dirtyEntities) {
-        if (dirtyEntity.type === 'delete') {
-          flushCommand.entities.push({ type: 'delete', id: dirtyEntity.id });
-          continue;
-        }
-        const entity = graph.get(name, dirtyEntity.id);
-        if (!entity) continue;
-
-        //do a shallow copy of the entity without the materialised refs
-        const entityWithoutRefs = {} as EntityWithIdAny;
-        for (const property in entity) {
-          const fieldRel = viewIndex.fieldRelations.get(property);
-          if (!fieldRel || fieldRel.type === 'source') {
-            //this is a real field
-            entityWithoutRefs[property] = entity[property];
-          }
-        }
-        delete entityWithoutRefs['as'];
-        //now we can snapshot just these fields, which should save us some effort over snapshotting the full entity,
-        //because this is a snapshot it doesn't matter if the proxy is changed after the flush returns
-        const entitySnapshot = snapshot(proxy(entityWithoutRefs));
-        flushCommand.entities.push({
-          type: 'set',
-          entity: entitySnapshot,
-        });
-      }
-      if (flushCommand.entities.length > 0) {
-        commands.push(flushCommand);
-      }
-      cache.dirtyEntities = [];
-      cache.seen.clear();
-    }
+    const commands = constructFlushCommands(dirtyEntityCaches, graph);
     if (commands.length === 0) {
       return Promise.resolve();
     }
@@ -268,14 +218,76 @@ async function doPersistGraphLocal<S extends GraphSchemaAny>(
       options.autoFlush !== undefined
         ? options.autoFlush
         : {
-            duration: 200,
+            interval: 200,
           };
     status.flush = flush;
     status.loaded = true;
     if (autoFlushConfig) {
       setInterval(() => {
         status.flush();
-      }, autoFlushConfig.duration);
+      }, autoFlushConfig.interval);
     }
   }
+}
+
+type DirtyGraphCache = Map<string, DirtyEntityCache>;
+
+interface DirtyEntityCache {
+  seen: Set<string>;
+  dirtyEntities: { id: string; type: 'set' | 'delete' }[];
+}
+interface FlushCommand {
+  entityName: string;
+  entities: (
+    | { type: 'set'; entity: EntityWithIdAny }
+    | { type: 'delete'; id: string }
+  )[];
+}
+
+//this mutates the dirty graph cache which is kinda gross
+function constructFlushCommands<S extends GraphSchemaAny>(
+  dirtyGraphCache: DirtyGraphCache,
+  graph: ValtioGraph<S>,
+): FlushCommand[] {
+  const commands: FlushCommand[] = [];
+  for (const [name, entityCache] of dirtyGraphCache) {
+    if (entityCache.dirtyEntities.length === 0) continue;
+    const flushCommand: FlushCommand = {
+      entityName: name,
+      entities: [],
+    };
+    const viewIndex = graph.getViews().get(name)!;
+    for (const dirtyEntity of entityCache.dirtyEntities) {
+      if (dirtyEntity.type === 'delete') {
+        flushCommand.entities.push({ type: 'delete', id: dirtyEntity.id });
+        continue;
+      }
+      const entity = graph.get(name, dirtyEntity.id);
+      if (!entity) continue;
+
+      //do a shallow copy of the entity without the materialised refs
+      const entityWithoutRefs = {} as EntityWithIdAny;
+      for (const property in entity) {
+        const fieldRel = viewIndex.fieldRelations.get(property);
+        if (!fieldRel || fieldRel.type === 'source') {
+          //this is a real field
+          entityWithoutRefs[property] = entity[property];
+        }
+      }
+      delete entityWithoutRefs['as'];
+      //now we can snapshot just these fields, which should save us some effort over snapshotting the full entity,
+      //because this is a snapshot it doesn't matter if the proxy is changed after the flush returns
+      const entitySnapshot = snapshot(proxy(entityWithoutRefs));
+      flushCommand.entities.push({
+        type: 'set',
+        entity: entitySnapshot,
+      });
+      if (flushCommand.entities.length > 0) {
+        commands.push(flushCommand);
+      }
+      entityCache.dirtyEntities = [];
+      entityCache.seen.clear();
+    }
+  }
+  return commands;
 }

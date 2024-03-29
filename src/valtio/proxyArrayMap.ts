@@ -70,7 +70,12 @@ export function proxyArrayMap<K, V>(
       if (itemIndex === undefined) {
         return false;
       }
-      this.data.splice(itemIndex, 1);
+      //replace the deleted item with the last item
+      //this is to avoid shifting the array which is O(n)
+      //but this will change the order of the items
+      const lastItem = this.data.pop();
+      if (lastItem) this.data[itemIndex] = lastItem;
+
       this.index.delete(key);
       return true;
     },

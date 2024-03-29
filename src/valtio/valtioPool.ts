@@ -119,6 +119,11 @@ class ValtioPoolState<S extends PoolSchemaAny> {
   getEntityTable(name: InferPoolEntityName<S>) {
     return this.entityTables.get(name)!;
   }
+  clear() {
+    this.entityTables.forEach((table) => {
+      table.clear();
+    });
+  }
 }
 
 export interface ValtioPoolOptions<S extends PoolSchemaAny> {
@@ -140,15 +145,38 @@ export class ValtioPool<S extends PoolSchemaAny> {
   ): InferPoolRootEntityWithId<S>['entity'] {
     const createdRoot = this.state.set({
       name: this.schema.rootModel.name,
-      entity: root,
+      entity: structuredClone(root),
     });
     this.rootEntity = createdRoot;
-
     return createdRoot as InferPoolRootEntityWithId<S>['entity'];
   }
+  deleteRoot(): void {
+    if (!this.rootEntity) return;
+    this.state.delete(this.schema.rootModel.name, this.rootEntity.id);
+    this.rootEntity = undefined;
+  }
   createEntity<T extends InferPoolEntityWithId<S>>(entity: T): T['entity'] {
+    //probably a bad idea
+    const existing = this.state.get(entity.name, entity.entity.id);
+    if (existing) return existing;
+    return this.state.set(structuredClone(entity));
+  }
+  createEntityMutable<T extends InferPoolEntityWithId<S>>(
+    entity: T,
+  ): T['entity'] {
+    //probably a bad idea
+    const existing = this.state.get(entity.name, entity.entity.id);
+    if (existing) return existing;
     return this.state.set(entity);
   }
+
+  deleteEntity<
+    N extends InferPoolEntityName<S>,
+    T extends InferPoolEntityWithId<S>,
+  >(name: N, id: string): void {
+    return this.state.delete(name, id);
+  }
+
   getRoot(): InferPoolRootEntity<S> | undefined {
     return this.rootEntity;
   }
@@ -161,5 +189,9 @@ export class ValtioPool<S extends PoolSchemaAny> {
 
   getState(): ValtioPoolState<S> {
     return this.state;
+  }
+
+  getSchema(): S {
+    return this.schema;
   }
 }

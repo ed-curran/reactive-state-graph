@@ -128,7 +128,31 @@ type ChatRoomView = InferView<typeof chatRoomView>;
 //
 //   console.log(root)
 // });
+test('valtio batching', async (t) => {
+  const thing = proxy({
+    a: 'a',
+    b: 'b',
+    c: 'c',
+  });
 
+  let skip = false;
+  subscribe(thing, (ops) => {
+    if (skip) {
+      console.log('skipped');
+      return;
+    }
+    console.log(ops);
+  });
+  thing.a = 'nice';
+  Promise.resolve({}).then(() => {
+    //subscribe will fire before this
+    skip = true;
+    thing.b = 'nice';
+    thing.a = 'nice again';
+  });
+
+  //Promise.resolve({});
+});
 export const roomEntity = {
   id: 'TestRoom',
   description: 'yooo',

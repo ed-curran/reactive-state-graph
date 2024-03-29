@@ -15,6 +15,7 @@ import {
 } from '../core';
 import { Op, ValtioPool } from './valtioPool';
 import { keyFromArrayMapPath } from './proxyArrayMap';
+import { boolean } from 'zod';
 
 /*
   Warning this code is ugly as hell.
@@ -23,7 +24,7 @@ import { keyFromArrayMapPath } from './proxyArrayMap';
 
 export type EntityWithIdAny = { readonly id: string; [key: string]: any };
 
-type Ref<S extends GraphSchemaAny> =
+export type Ref<S extends GraphSchemaAny> =
   | {
       type: 'source';
       fieldName: string;
@@ -39,7 +40,7 @@ type Ref<S extends GraphSchemaAny> =
       fieldName: string;
       relation: IncomingRelationship<InferPoolModel<S['poolSchema']>>;
     };
-type ViewIndex<S extends GraphSchemaAny> = {
+export type ViewIndex<S extends GraphSchemaAny> = {
   view: InferGraphView<S>;
   fieldRelations: Map<string, Ref<S>>;
 };
@@ -457,10 +458,31 @@ export class ValtioGraph<S extends GraphSchemaAny> {
       InferPoolEntityWithId<S['poolSchema']>,
       { name: T }
     >['entity'],
+    fieldsToMaterialise: Map<string, FieldValue> | undefined = undefined,
+    fieldHistory: Map<string, FieldValue> | undefined = undefined,
   ): void {
     const view = this.viewMap.get(name)!.view;
     const handledEntityFieldRefs = this.handledEntityFieldRefs.get(name)!;
-    materialiseEntity(entityProxy, view, this.pool, handledEntityFieldRefs);
+    materialiseEntity(
+      entityProxy,
+      view,
+      this.pool,
+      handledEntityFieldRefs,
+      fieldsToMaterialise,
+      fieldHistory,
+    );
+  }
+
+  dematerialiseEntity<T extends InferPoolEntityName<S['poolSchema']>>(
+    name: T,
+    entityProxy: Extract<
+      InferPoolEntityWithId<S['poolSchema']>,
+      { name: T }
+    >['entity'],
+  ): void {
+    const view = this.viewMap.get(name)!.view;
+    const handledEntityFieldRefs = this.handledEntityFieldRefs.get(name)!;
+    dematerialiseEntity(entityProxy, view, this.pool, handledEntityFieldRefs);
   }
 
   create<T extends InferPoolEntityName<S['poolSchema']>>(
@@ -488,8 +510,20 @@ export class ValtioGraph<S extends GraphSchemaAny> {
     name: T,
     id: string,
   ): void {
-    this.pool.getState().delete(name, id);
+    const entity = this.pool.getEntity(name, id);
+    if (entity) {
+      this.pool.deleteEntity(name, id);
+      this.dematerialiseEntity(name, entity);
+    }
   }
+
+  // deleteRoot(): void {
+  //   const root = this.pool.getRoot();
+  //   if(root) {
+  //     this.pool.deleteRoot();
+  //     this.dematerialiseEntity(this.schema.rootView.model.name, root)
+  //   }
+  // }
 }
 
 //seems dumb
@@ -574,6 +608,9 @@ function singleToCollection(
   },
   handledFields: Set<string>,
 ) {
+  console.log('singleToCollection');
+  console.log(source);
+  console.log(target);
   if (target.currentEntity && source.field) {
     //set the source field
     source.entity[source.field] = target.currentEntity.id;
@@ -592,11 +629,14 @@ function singleToCollection(
 
     //remove materalised ref on prev target entity
     if (target.prevEntity) {
+      console.log('removing existing');
       const ref = target.prevEntity[target.materialisedAs] as EntityWithIdAny[];
+      console.log(ref.slice());
       if (ref) {
         const index = ref.findIndex((item) => item.id === source.entity.id);
         ref.splice(index, 1);
       }
+      console.log(ref.slice());
       handledFields.add(
         entityFieldRef(target.prevEntity.id, target.materialisedAs),
       );
@@ -683,21 +723,65 @@ function collectionToSingle(
   }
 }
 
+function removeRefFromTargetSingle(
+  targetEntity: EntityWithIdAny,
+  materialisedAs: string,
+  handledFields: Set<string>,
+) {
+  //remove materalised ref on prev target entity
+  targetEntity[materialisedAs] = undefined;
+  //should I be doing this on the prev entity?
+  handledFields.add(entityFieldRef(targetEntity.id, materialisedAs));
+}
+
+function removeRefFromTargetCollection(
+  targetEntity: EntityWithIdAny,
+  materialisedAs: string,
+  sourceEntityId: string,
+  handledFields: Set<string>,
+) {
+  //remove materalised ref on prev target entity
+  const ref = targetEntity[materialisedAs] as EntityWithIdAny[];
+  if (ref) {
+    const index = ref.findIndex((item) => item.id === sourceEntityId);
+    ref.splice(index, 1);
+  }
+  handledFields.add(entityFieldRef(targetEntity.id, materialisedAs));
+}
+
+export type FieldValue = {
+  readonly path: (symbol | string)[];
+  readonly value: unknown;
+};
+
 function materialiseEntity<S extends GraphSchemaAny>(
   entityProxy: InferPoolEntityWithId<S['poolSchema']>['entity'],
   view: InferGraphView<S>,
   pool: ValtioPool<S['poolSchema']>,
   handledEntityFieldRefs: Set<string>,
+  fieldsToMaterialise: Map<string, FieldValue> | undefined = undefined,
+  fieldHistory: Map<string, FieldValue> | undefined = undefined,
 ) {
   if (!view.outgoingRelations) return;
 
   for (const outgoingRelation of view.outgoingRelations) {
+    if (
+      fieldsToMaterialise &&
+      !fieldsToMaterialise.has(outgoingRelation.source.field)
+    )
+      break;
     switch (outgoingRelation.source.type) {
       case 'single': {
+        const previousTargetId = fieldHistory
+          ? (fieldHistory.get(outgoingRelation.source.field)?.value as string)
+          : undefined;
         const currentTargetId = entityProxy[outgoingRelation.source.field];
+        if (previousTargetId === currentTargetId) break;
+
+        //const previousTargetId = history?.value
         const targets = getTargets(pool, outgoingRelation.target.model.name, {
           current: currentTargetId,
-          prev: undefined,
+          prev: previousTargetId,
         });
 
         switch (outgoingRelation.target.type) {
@@ -740,17 +824,41 @@ function materialiseEntity<S extends GraphSchemaAny>(
         if (outgoingRelation.target.type === 'collection') {
           continue;
         }
-        //pain
+
         const targetIds = entityProxy[
           outgoingRelation.source.field
         ] as string[];
+        const previousTargetIds = fieldHistory
+          ? (fieldHistory.get(outgoingRelation.source.field)?.value as string[])
+          : undefined;
 
-        for (const targetId of targetIds) {
-          const targets = getTargets(pool, outgoingRelation.target.model.name, {
-            current: targetId,
-            prev: undefined,
-          });
+        //do a diff between the previous and current target ids
+        const diff = previousTargetIds
+          ? diffArrays(previousTargetIds, targetIds)
+          : { added: targetIds, removed: [] };
 
+        //remove the ref from the removed targets
+        if (outgoingRelation.target.field !== undefined) {
+          for (const targetId of diff.removed) {
+            const targetEntity = pool.getEntity(
+              outgoingRelation.target.model.name,
+              targetId,
+            );
+            if (targetEntity === undefined) continue;
+            removeRefFromTargetSingle(
+              targetEntity,
+              outgoingRelation.target.field,
+              handledEntityFieldRefs,
+            );
+          }
+        }
+
+        //add the ref to the added targets
+        for (const targetId of diff.added) {
+          const targetEntity = pool.getEntity(
+            outgoingRelation.target.model.name,
+            targetId,
+          );
           collectionToSingle(
             {
               entity: entityProxy,
@@ -758,8 +866,8 @@ function materialiseEntity<S extends GraphSchemaAny>(
               materialisedAs: outgoingRelation.source.materializedAs, //ignore this
             },
             {
-              currentEntity: targets.current,
-              prevEntity: targets.prev,
+              currentEntity: targetEntity,
+              prevEntity: undefined,
               materialisedAs: outgoingRelation.target.field,
             },
             handledEntityFieldRefs,
@@ -771,7 +879,6 @@ function materialiseEntity<S extends GraphSchemaAny>(
     }
   }
 }
-
 function dematerialiseEntity<S extends GraphSchemaAny>(
   entityProxy: InferPoolEntityWithId<S['poolSchema']>['entity'],
   view: InferGraphView<S>,
@@ -780,92 +887,56 @@ function dematerialiseEntity<S extends GraphSchemaAny>(
 ) {
   if (!view.outgoingRelations) return;
 
-  //remove this source element from any targets that its materialised on to
-  //we do this by performing a normal replace ref but
-  // with the "current" target undefined
   for (const outgoingRelation of view.outgoingRelations) {
-    if (!outgoingRelation.target.field) {
-      continue;
-    }
+    if (outgoingRelation.target.field === undefined) continue;
     switch (outgoingRelation.source.type) {
       case 'single': {
-        const prevTargetId = entityProxy[outgoingRelation.source.field];
+        const currentTargetId = entityProxy[
+          outgoingRelation.source.field
+        ] as string;
+        const targetEntity = pool.getEntity(
+          outgoingRelation.target.model.name,
+          currentTargetId,
+        );
+        if (!targetEntity) break;
 
-        const targets = getTargets(pool, outgoingRelation.target.model.name, {
-          current: undefined,
-          prev: prevTargetId,
-        });
         switch (outgoingRelation.target.type) {
           case 'single': {
-            singleToSingle(
-              {
-                entity: entityProxy,
-                //ignore these
-                field: undefined,
-                materialisedAs: undefined,
-              },
-              {
-                currentEntity: targets.current,
-                prevEntity: targets.prev,
-                materialisedAs: outgoingRelation.target.field,
-              },
+            removeRefFromTargetSingle(
+              targetEntity,
+              outgoingRelation.target.field,
               handledEntityFieldRefs,
             );
             break;
           }
           case 'collection': {
-            singleToCollection(
-              {
-                entity: entityProxy,
-                //ignore these
-                field: undefined,
-                materialisedAs: undefined,
-              },
-              {
-                currentEntity: targets.current,
-                prevEntity: targets.prev,
-                materialisedAs: outgoingRelation.target.field,
-              },
+            removeRefFromTargetCollection(
+              targetEntity,
+              outgoingRelation.target.field,
+              entityProxy.id,
               handledEntityFieldRefs,
             );
             break;
           }
         }
-
         break;
       }
       case 'collection': {
-        if (outgoingRelation.target.type === 'collection') {
-          continue;
-        }
-        //pain
         const targetIds = entityProxy[
           outgoingRelation.source.field
         ] as string[];
-
         for (const targetId of targetIds) {
-          const targets = getTargets(pool, outgoingRelation.target.model.name, {
-            current: undefined,
-            prev: targetId,
-          });
-
-          collectionToSingle(
-            {
-              entity: entityProxy,
-              //ignore these
-              field: undefined,
-              materialisedAs: undefined,
-            },
-            {
-              currentEntity: targets.current,
-              prevEntity: targets.prev,
-              materialisedAs: outgoingRelation.target.field,
-            },
+          const targetEntity = pool.getEntity(
+            outgoingRelation.target.model.name,
+            targetId,
+          );
+          if (targetEntity === undefined) continue;
+          removeRefFromTargetSingle(
+            targetEntity,
+            outgoingRelation.target.field,
             handledEntityFieldRefs,
           );
         }
-
-        break;
       }
     }
   }
@@ -915,4 +986,19 @@ function initGraphEntity<S extends GraphSchemaAny>(
       }
     }
   }
+}
+
+function diffArrays(
+  a: string[],
+  b: string[],
+): {
+  added: string[];
+  removed: string[];
+} {
+  const aSet = new Set(a);
+  const bSet = new Set(b);
+  const removed = a.filter((x) => !bSet.has(x));
+  const added = b.filter((x) => !aSet.has(x));
+
+  return { added, removed };
 }
